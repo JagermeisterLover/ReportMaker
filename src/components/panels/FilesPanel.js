@@ -1,5 +1,4 @@
 // FilesPanel.js - Left sidebar for file/folder management
-import { FolderIcon, FileIcon, ChevronRightIcon, ChevronDownIcon } from '../Icons.js';
 
 export const FilesPanel = ({
   items = [],
@@ -51,15 +50,13 @@ export const FilesPanel = ({
                 onShowContextMenu(e, 'folder', folder);
               }
             },
-            hasChildren && React.createElement('div',
-              { style: { marginRight: '4px', display: 'flex', alignItems: 'center' } },
-              isExpanded
-                ? React.createElement(ChevronDownIcon, { size: 12, color: c.textDim })
-                : React.createElement(ChevronRightIcon, { size: 12, color: c.textDim })
+            hasChildren && React.createElement('span',
+              { style: { marginRight: '4px', color: c.textDim, fontSize: '10px' } },
+              isExpanded ? '▼' : '▶'
             ),
-            React.createElement('div',
-              { style: { marginRight: '6px', display: 'flex', alignItems: 'center' } },
-              React.createElement(FolderIcon, { size: 16, color: c.accent })
+            React.createElement('span',
+              { style: { marginRight: '6px', fontSize: '14px' } },
+              '📁'
             ),
             React.createElement('span',
               { style: { color: c.text, fontSize: '13px' } },
@@ -95,9 +92,9 @@ export const FilesPanel = ({
               onShowContextMenu(e, 'item', item);
             }
           },
-          React.createElement('div',
-            { style: { marginRight: '6px', display: 'flex', alignItems: 'center' } },
-            React.createElement(FileIcon, { size: 16, color: item.color || c.textDim })
+          React.createElement('span',
+            { style: { marginRight: '6px', fontSize: '14px' } },
+            '📄'
           ),
           React.createElement('span',
             { style: { color: c.text, fontSize: '13px' } },

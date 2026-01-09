@@ -3,33 +3,34 @@
  * Replaces the default OS menu bar with a modern, integrated design
  */
 
-export function MenuBar({ c, onMenuAction, t }) {
+export function MenuBar({ c, onMenuAction }) {
   const [openMenu, setOpenMenu] = React.useState(null);
   const [menuPosition, setMenuPosition] = React.useState({ x: 0, y: 0 });
 
-  // Menu structure (using translation object)
+  // Menu structure (simple English labels for wireframe)
   const menus = {
-    [t.menu.file]: [
-      { label: t.menu.importZMX, action: 'import-zmx', shortcut: 'Ctrl+I' }
-    ],
-    [t.menu.reports]: [
-      { label: t.menu.exportHTMLReport, action: 'export-html-report', shortcut: 'Ctrl+E' },
-      { label: t.menu.exportPDFReport, action: 'export-pdf-report', shortcut: 'Ctrl+P' }
-    ],
-    [t.menu.view]: [
-      { label: t.menu.reload, action: 'reload', shortcut: 'Ctrl+R' },
-      { label: t.menu.toggleDevTools, action: 'toggle-devtools', shortcut: 'Ctrl+Shift+I' },
+    'File': [
+      { label: 'New Item', action: 'new-item', shortcut: 'Ctrl+N' },
       { type: 'separator' },
-      { label: t.menu.toggleFullscreen, action: 'toggleFullscreen', shortcut: 'F11' }
+      { label: 'Export HTML Report', action: 'export-html', shortcut: 'Ctrl+E' },
+      { label: 'Export PDF Report', action: 'export-pdf', shortcut: 'Ctrl+P' }
     ],
-    [t.menu.tools]: [
-      { label: t.menu.settings, action: 'open-settings', shortcut: 'Ctrl+,' }
+    'Edit': [
+      { label: 'Rename Item', action: 'rename-item', shortcut: 'F2' },
+      { label: 'Delete Item', action: 'delete-item', shortcut: 'Delete' }
     ],
-    [t.menu.help]: [
-      { label: t.menu.documentation, action: 'documentation' },
-      { label: t.menu.checkForUpdates || 'Check for Updates', action: 'check-for-updates' },
+    'View': [
+      { label: 'Refresh', action: 'refresh', shortcut: 'F5' },
       { type: 'separator' },
-      { label: t.menu.about, action: 'about' }
+      { label: 'Toggle DevTools', action: 'toggle-devtools', shortcut: 'Ctrl+Shift+I' }
+    ],
+    'Settings': [
+      { label: 'Preferences', action: 'settings', shortcut: 'Ctrl+,' }
+    ],
+    'Help': [
+      { label: 'Documentation', action: 'documentation' },
+      { type: 'separator' },
+      { label: 'About', action: 'about' }
     ]
   };
 
@@ -90,38 +91,25 @@ export function MenuBar({ c, onMenuAction, t }) {
       WebkitAppRegion: 'drag' // Make draggable on Windows
     }
   },
-    // App icon and name
+    // App name
     React.createElement('div', {
       style: {
         display: 'flex',
         alignItems: 'center',
-        gap: '8px',
-        marginRight: '12px',
+        marginRight: '20px',
         WebkitAppRegion: 'no-drag'
       }
     },
-      // Icon
-      React.createElement('img', {
-        src: '../icons/IconInvertedNoBGGlow.png',
-        alt: 'SurfaceExpert',
-        style: {
-          width: '36px',
-          height: '36px',
-          objectFit: 'contain'
-        }
-      }),
       // Program name
       React.createElement('span', {
         style: {
-          fontSize: '16px',           // Slightly larger for hierarchy
-          fontWeight: '600',          // Bolder
+          fontSize: '16px',
+          fontWeight: '600',
           color: c.text,
-          // Prioritize Inter, then nice system fonts
           fontFamily: 'system-ui, -apple-system, sans-serif',
-          letterSpacing: '-0.5px',    // Tighter tracking looks more professional
-          textShadow: '0 1px 2px rgba(0,0,0,0.2)' // Subtle depth
+          letterSpacing: '-0.5px'
         }
-      }, 'SurfaceExpert')
+      }, 'ReportMaker')
     ),
 
     // Menu items

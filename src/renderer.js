@@ -200,6 +200,23 @@ const ReportMaker = () => {
     alert('PDF export functionality will be implemented');
   };
 
+  // Window control handlers
+  const handleWindowControl = (action) => {
+    if (window.electronAPI) {
+      switch (action) {
+        case 'minimize':
+          window.electronAPI.minimizeWindow?.();
+          break;
+        case 'maximize':
+          window.electronAPI.maximizeWindow?.();
+          break;
+        case 'close':
+          window.electronAPI.closeWindow?.();
+          break;
+      }
+    }
+  };
+
   // Main layout
   return React.createElement('div',
     {
@@ -216,10 +233,10 @@ const ReportMaker = () => {
       onClick: () => setContextMenu(null) // Close context menu on click
     },
     // Title bar
-    React.createElement(TitleBar, { colorScheme: c }),
+    React.createElement(TitleBar, { c, onWindowControl: handleWindowControl }),
 
     // Menu bar
-    React.createElement(MenuBar, { colorScheme: c }),
+    React.createElement(MenuBar, { c, onMenuAction: handleMenuAction }),
 
     // Main content area
     React.createElement('div',
