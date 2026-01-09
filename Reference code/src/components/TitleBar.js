@@ -56,7 +56,7 @@ export function TitleBar({ c, onWindowControl }) {
         fontFamily: 'system-ui, -apple-system, sans-serif',
         letterSpacing: '0.3px'
       }
-    }, 'ReportMaker'),
+    }, 'SurfaceExpert'),
 
     // Right side - Window controls
     React.createElement('div', {

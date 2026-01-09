@@ -6,48 +6,311 @@ import { ContentPanel } from './components/panels/ContentPanel.js';
 import { SettingsModal } from './components/dialogs/SettingsModal.js';
 import { InputDialog } from './components/dialogs/InputDialog.js';
 import { ContextMenu } from './components/dialogs/ContextMenu.js';
+import { AboutDialog } from './components/dialogs/AboutDialog.js';
 import { getPalette } from './constants/colorPalettes.js';
+import { getTranslations } from './constants/locales.js';
+import { parseZemaxFile } from './utils/zemaxParser.js';
+import { loadAllCatalogs } from './utils/glassCatalogLoader.js';
+import { calculateRefractiveIndexWithCatalog } from './utils/glassCalculator.js';
 
 const ReportMaker = () => {
+  console.log('ReportMaker component rendered');
+
   // State management
-  const [items, setItems] = React.useState([]);
-  const [selectedItem, setSelectedItem] = React.useState(null);
+  const [systems, setSystems] = React.useState([]);
+  const [selectedSystem, setSelectedSystem] = React.useState(null);
   const [activeTab, setActiveTab] = React.useState('Optical System');
   const [activeLensTab, setActiveLensTab] = React.useState('Lens 1');
   const [folders, setFolders] = React.useState([]);
   const [expandedFolders, setExpandedFolders] = React.useState(new Set());
   const [showSettings, setShowSettings] = React.useState(false);
+  const [showAbout, setShowAbout] = React.useState(false);
   const [showInputDialog, setShowInputDialog] = React.useState(false);
   const [inputDialogConfig, setInputDialogConfig] = React.useState(null);
   const [contextMenu, setContextMenu] = React.useState(null);
-  const [settings, setSettings] = React.useState({
-    colorscale: 'Viridis',
-    theme: 'dark'
-  });
-  const [nextItemId, setNextItemId] = React.useState(1);
 
-  // Color scheme
-  const c = getPalette(settings.theme || 'dark');
+  // Settings state
+  const [theme, setTheme] = React.useState('dark');
+  const [locale, setLocale] = React.useState('en');
+
+  // Color scheme and translations
+  const c = getPalette(theme);
+  const t = getTranslations(locale);
+
+  // Load glass catalogs on startup
+  React.useEffect(() => {
+    loadAllCatalogs().then(catalogs => {
+      console.log('Loaded glass catalogs:', catalogs);
+    }).catch(error => {
+      console.error('Failed to load glass catalogs:', error);
+    });
+  }, []);
+
+  // Load settings on startup
+  React.useEffect(() => {
+    if (window.electronAPI && window.electronAPI.loadSettings) {
+      window.electronAPI.loadSettings().then(result => {
+        if (result.success && result.settings) {
+          if (result.settings.theme) setTheme(result.settings.theme);
+          if (result.settings.locale) setLocale(result.settings.locale);
+        }
+      });
+    }
+  }, []);
+
+  // Load optical systems on startup
+  React.useEffect(() => {
+    loadSystems();
+  }, []);
+
+  const loadSystems = async () => {
+    if (window.electronAPI && window.electronAPI.loadSystems) {
+      const result = await window.electronAPI.loadSystems();
+      if (result.success) {
+        setSystems(result.systems);
+        setFolders(result.folders);
+      }
+    }
+  };
+
+  // Helper function to recalculate missing refractive indices
+  const recalculateRefractiveIndices = (system) => {
+    if (!system || !system.ldeData) return system;
+
+    const wavelength = system.wavelength || 550;
+    let updated = false;
+
+    const updatedLdeData = system.ldeData.map(surface => {
+      // If material exists but n or catalog is empty or missing, calculate it
+      if (surface.material && ((!surface.n || surface.n === '') || (!surface.catalog || surface.catalog === ''))) {
+        const result = calculateRefractiveIndexWithCatalog(surface.material, wavelength);
+        if (result !== null) {
+          console.log(`Recalculated n=${result.n.toFixed(6)} for ${surface.material} at ${wavelength}nm from ${result.catalog} catalog`);
+          updated = true;
+          return { ...surface, n: result.n.toFixed(6), catalog: result.catalog };
+        }
+      }
+      return surface;
+    });
+
+    if (updated) {
+      return { ...system, ldeData: updatedLdeData };
+    }
+    return system;
+  };
+
+  // Recalculate refractive indices when a system is selected
+  const lastProcessedSystemRef = React.useRef(null);
+
+  React.useEffect(() => {
+    if (selectedSystem && selectedSystem.name) {
+      // Check if this is a different system or if it needs recalculation
+      const needsRecalc = selectedSystem.ldeData?.some(surface =>
+        surface.material && ((!surface.n || surface.n === '') || (!surface.catalog || surface.catalog === ''))
+      );
+
+      // Only process if it's a new system selection or if it needs recalculation
+      if (lastProcessedSystemRef.current !== selectedSystem && needsRecalc) {
+        const updatedSystem = recalculateRefractiveIndices(selectedSystem);
+        if (updatedSystem !== selectedSystem) {
+          lastProcessedSystemRef.current = updatedSystem;
+          setSelectedSystem(updatedSystem);
+          // Save the updated system
+          if (window.electronAPI && window.electronAPI.saveSystem) {
+            window.electronAPI.saveSystem('', updatedSystem.name, updatedSystem);
+          }
+        }
+      } else {
+        // Track the current system even if no update was needed
+        lastProcessedSystemRef.current = selectedSystem;
+      }
+    }
+  }, [selectedSystem?.name]); // Only run when system name changes
+
+  // Save settings whenever they change
+  React.useEffect(() => {
+    if (window.electronAPI && window.electronAPI.saveSettings) {
+      const settings = { theme, locale };
+      window.electronAPI.saveSettings(settings);
+    }
+  }, [theme, locale]);
+
+  // Optical system management functions
+  const handleCreateSystem = React.useCallback(async () => {
+    console.log('handleCreateSystem called');
+
+    // Generate unique name
+    const baseName = 'New System';
+    let name = baseName;
+    let counter = 1;
+    while (systems.some(s => s.name === name)) {
+      name = `${baseName} ${counter}`;
+      counter++;
+    }
+
+    const newSystem = {
+      name: name,
+      wavelength: 550, // nm
+      ldeData: [
+        { surface: 0, radius: Infinity, thickness: Infinity, material: '', catalog: '', n: '', semiDiameter: 0, diameter: 0 },
+        { surface: 1, radius: Infinity, thickness: 10, material: '', catalog: '', n: '', semiDiameter: 10, diameter: 20 },
+        { surface: 2, radius: Infinity, thickness: 0, material: '', catalog: '', n: '', semiDiameter: 10, diameter: 20 }
+      ],
+      createdAt: Date.now()
+    };
+
+    console.log('Creating system:', newSystem);
+
+    if (window.electronAPI && window.electronAPI.saveSystem) {
+      const result = await window.electronAPI.saveSystem('', name, newSystem);
+      console.log('Save result:', result);
+      if (result.success) {
+        await loadSystems();
+        setSelectedSystem(newSystem);
+      }
+    }
+  }, [systems, loadSystems]);
+
+  const handleDeleteSystem = React.useCallback(async (system) => {
+    if (window.electronAPI && window.electronAPI.deleteSystem) {
+      const result = await window.electronAPI.deleteSystem(system.folderPath || '', system.name);
+      if (result.success) {
+        await loadSystems();
+        if (selectedSystem?.name === system.name) {
+          setSelectedSystem(null);
+        }
+      }
+    }
+  }, [selectedSystem, loadSystems]);
+
+  const handleRenameSystem = React.useCallback((system) => {
+    setInputDialogConfig({
+      title: 'Rename Optical System',
+      message: 'Enter new name:',
+      defaultValue: system.name,
+      onConfirm: async (newName) => {
+        if (window.electronAPI && window.electronAPI.deleteSystem && window.electronAPI.saveSystem) {
+          // Delete old file
+          await window.electronAPI.deleteSystem(system.folderPath || '', system.name);
+          // Save with new name
+          const updatedSystem = { ...system, name: newName };
+          await window.electronAPI.saveSystem(system.folderPath || '', newName, updatedSystem);
+          await loadSystems();
+          setSelectedSystem(updatedSystem);
+        }
+        setShowInputDialog(false);
+        setInputDialogConfig(null);
+      },
+      onCancel: () => {
+        setShowInputDialog(false);
+        setInputDialogConfig(null);
+      }
+    });
+    setShowInputDialog(true);
+  }, [loadSystems]);
+
+  // Save current system data
+  const saveCurrentSystem = React.useCallback(async () => {
+    if (selectedSystem && window.electronAPI && window.electronAPI.saveSystem) {
+      await window.electronAPI.saveSystem(
+        selectedSystem.folderPath || '',
+        selectedSystem.name,
+        selectedSystem
+      );
+    }
+  }, [selectedSystem]);
+
+  // Import from Zemax file
+  const handleImportZemax = React.useCallback(async () => {
+    if (window.electronAPI && window.electronAPI.showOpenDialog && window.electronAPI.readFile) {
+      const result = await window.electronAPI.showOpenDialog({
+        title: 'Import Zemax File',
+        filters: [
+          { name: 'Zemax Files', extensions: ['zmx', 'ZMX'] },
+          { name: 'All Files', extensions: ['*'] }
+        ],
+        properties: ['openFile']
+      });
+
+      if (!result.canceled && result.filePaths && result.filePaths.length > 0) {
+        const filePath = result.filePaths[0];
+        const fileReadResult = await window.electronAPI.readFile(filePath);
+
+        if (fileReadResult.success) {
+          try {
+            const parsedData = parseZemaxFile(fileReadResult.content, filePath);
+
+            if (parsedData) {
+              // Create new system with parsed data
+              const newSystem = {
+                name: parsedData.name,
+                description: parsedData.description,
+                wavelength: parsedData.wavelength,
+                ldeData: parsedData.ldeData,
+                createdAt: Date.now()
+              };
+
+              // Save the system
+              if (window.electronAPI.saveSystem) {
+                const saveResult = await window.electronAPI.saveSystem('', parsedData.name, newSystem);
+                if (saveResult.success) {
+                  await loadSystems();
+                  setSelectedSystem(newSystem);
+                }
+              }
+            }
+          } catch (err) {
+            console.error('Error parsing Zemax file:', err);
+            alert(`Error parsing Zemax file: ${err.message}`);
+          }
+        } else {
+          alert(`Error reading file: ${fileReadResult.error}`);
+        }
+      }
+    }
+  }, [loadSystems]);
+
+  // Report generation
+  const handleExportHTML = React.useCallback(() => {
+    if (!selectedSystem) {
+      alert('Please select a system to export');
+      return;
+    }
+    console.log('Export HTML report for:', selectedSystem.name);
+    alert('HTML export functionality will be implemented');
+  }, [selectedSystem]);
+
+  const handleExportPDF = React.useCallback(() => {
+    if (!selectedSystem) {
+      alert('Please select a system to export');
+      return;
+    }
+    console.log('Export PDF report for:', selectedSystem.name);
+    alert('PDF export functionality will be implemented');
+  }, [selectedSystem]);
 
   // Menu action handler
   const handleMenuAction = React.useCallback((action) => {
     console.log('Menu action:', action);
     switch (action) {
       case 'new-item':
-        handleCreateItem();
+        handleCreateSystem();
         break;
       case 'delete-item':
-        if (selectedItem) {
-          handleDeleteItem(selectedItem.id);
+        if (selectedSystem) {
+          handleDeleteSystem(selectedSystem);
         }
         break;
       case 'rename-item':
-        if (selectedItem) {
-          handleRenameItem(selectedItem);
+        if (selectedSystem) {
+          handleRenameSystem(selectedSystem);
         }
         break;
       case 'settings':
         setShowSettings(true);
+        break;
+      case 'about':
+        setShowAbout(true);
         break;
       case 'export-html':
         handleExportHTML();
@@ -56,13 +319,12 @@ const ReportMaker = () => {
         handleExportPDF();
         break;
       case 'refresh':
-        // Refresh logic (placeholder)
-        console.log('Refresh triggered');
+        loadSystems();
         break;
       default:
         console.log('Unknown action:', action);
     }
-  }, [selectedItem, items]);
+  }, [selectedSystem, handleCreateSystem, handleDeleteSystem, handleRenameSystem, handleExportHTML, handleExportPDF, loadSystems]);
 
   // IPC listener for menu actions
   React.useEffect(() => {
@@ -70,67 +332,6 @@ const ReportMaker = () => {
       window.electronAPI.onMenuAction(handleMenuAction);
     }
   }, [handleMenuAction]);
-
-  // Item management functions
-  const handleCreateItem = () => {
-    setInputDialogConfig({
-      title: 'Create New Item',
-      message: 'Enter item name:',
-      defaultValue: `Item ${nextItemId}`,
-      onConfirm: (name) => {
-        const newItem = {
-          id: nextItemId,
-          name: name || `Item ${nextItemId}`,
-          folderId: null,
-          color: `hsl(${(nextItemId * 137) % 360}, 70%, 60%)`, // Random color
-          lenses: ['Lens 1', 'Lens 2', 'Lens 3'],
-          createdAt: Date.now()
-        };
-        setItems([...items, newItem]);
-        setSelectedItem(newItem);
-        setNextItemId(nextItemId + 1);
-        setShowInputDialog(false);
-        setInputDialogConfig(null);
-      },
-      onCancel: () => {
-        setShowInputDialog(false);
-        setInputDialogConfig(null);
-      }
-    });
-    setShowInputDialog(true);
-  };
-
-  const handleDeleteItem = (id) => {
-    const updatedItems = items.filter(item => item.id !== id);
-    setItems(updatedItems);
-    if (selectedItem?.id === id) {
-      setSelectedItem(updatedItems.length > 0 ? updatedItems[0] : null);
-    }
-  };
-
-  const handleRenameItem = (item) => {
-    setInputDialogConfig({
-      title: 'Rename Item',
-      message: 'Enter new name:',
-      defaultValue: item.name,
-      onConfirm: (newName) => {
-        const updatedItems = items.map(i =>
-          i.id === item.id ? { ...i, name: newName } : i
-        );
-        setItems(updatedItems);
-        if (selectedItem?.id === item.id) {
-          setSelectedItem({ ...selectedItem, name: newName });
-        }
-        setShowInputDialog(false);
-        setInputDialogConfig(null);
-      },
-      onCancel: () => {
-        setShowInputDialog(false);
-        setInputDialogConfig(null);
-      }
-    });
-    setShowInputDialog(true);
-  };
 
   // Toggle folder expansion
   const handleToggleFolder = (folderId) => {
@@ -148,24 +349,39 @@ const ReportMaker = () => {
     event.preventDefault();
     event.stopPropagation();
 
-    const menuItems = type === 'item'
-      ? [
-          {
-            label: 'Rename',
-            onClick: () => {
-              handleRenameItem(target);
-              setContextMenu(null);
-            }
-          },
-          {
-            label: 'Delete',
-            onClick: () => {
-              handleDeleteItem(target.id);
-              setContextMenu(null);
-            }
+    let menuItems = [];
+
+    if (type === 'system') {
+      menuItems = [
+        {
+          label: 'Rename',
+          onClick: () => {
+            handleRenameSystem(target);
+            setContextMenu(null);
           }
-        ]
-      : [];
+        },
+        {
+          label: 'Delete',
+          onClick: () => {
+            handleDeleteSystem(target);
+            setContextMenu(null);
+          }
+        }
+      ];
+    } else if (type === 'folder') {
+      menuItems = [
+        {
+          label: 'Delete Folder',
+          onClick: async () => {
+            if (window.electronAPI && window.electronAPI.deleteFolder) {
+              await window.electronAPI.deleteFolder(target.path);
+              await loadSystems();
+            }
+            setContextMenu(null);
+          }
+        }
+      ];
+    }
 
     setContextMenu({
       x: event.clientX,
@@ -174,23 +390,21 @@ const ReportMaker = () => {
     });
   };
 
-  // Report generation (placeholder)
-  const handleExportHTML = () => {
-    if (!selectedItem) {
-      alert('Please select an item to export');
-      return;
+  // Window control handlers
+  const handleWindowControl = (action) => {
+    if (window.electronAPI) {
+      switch (action) {
+        case 'minimize':
+          window.electronAPI.minimizeWindow?.();
+          break;
+        case 'maximize':
+          window.electronAPI.maximizeWindow?.();
+          break;
+        case 'close':
+          window.electronAPI.closeWindow?.();
+          break;
+      }
     }
-    console.log('Export HTML report for:', selectedItem.name);
-    alert('HTML export functionality will be implemented');
-  };
-
-  const handleExportPDF = () => {
-    if (!selectedItem) {
-      alert('Please select an item to export');
-      return;
-    }
-    console.log('Export PDF report for:', selectedItem.name);
-    alert('PDF export functionality will be implemented');
   };
 
   // Main layout
@@ -209,57 +423,60 @@ const ReportMaker = () => {
       onClick: () => setContextMenu(null) // Close context menu on click
     },
     // Title bar
-    React.createElement(TitleBar, { colorScheme: c }),
+    React.createElement(TitleBar, { c, onWindowControl: handleWindowControl }),
 
     // Menu bar
-    React.createElement(MenuBar, { colorScheme: c }),
+    React.createElement(MenuBar, { c, onMenuAction: handleMenuAction }),
 
     // Main content area
     React.createElement('div',
       { style: { flex: 1, display: 'flex', overflow: 'hidden' } },
 
-      // Left panel - Files
+      // Left panel - Systems
       React.createElement(FilesPanel, {
-        items,
-        selectedItem,
-        onSelectItem: setSelectedItem,
-        onRenameItem: handleRenameItem,
-        onDeleteItem: handleDeleteItem,
-        onCreateItem: handleCreateItem,
+        systems,
+        selectedSystem,
+        onSelectSystem: setSelectedSystem,
+        onRenameSystem: handleRenameSystem,
+        onDeleteSystem: handleDeleteSystem,
+        onCreateSystem: handleCreateSystem,
         folders,
         expandedFolders,
         onToggleFolder: handleToggleFolder,
         onShowContextMenu: handleShowContextMenu,
-        colorScheme: c
+        colorScheme: c,
+        onImportZemax: handleImportZemax
       }),
 
       // Center panel - Content
       React.createElement(ContentPanel, {
-        selectedItem,
+        selectedSystem,
+        setSelectedSystem,
         activeTab,
         onTabChange: setActiveTab,
         activeLensTab,
         onLensTabChange: setActiveLensTab,
+        saveCurrentSystem,
         colorScheme: c
       })
     ),
 
     // Settings modal
     showSettings && React.createElement(SettingsModal, {
+      theme,
+      setTheme,
+      locale,
+      setLocale,
       onClose: () => setShowSettings(false),
-      settings,
-      onSettingsChange: setSettings,
-      colorScheme: c
+      c,
+      t
     }),
 
     // Input dialog
     showInputDialog && inputDialogConfig && React.createElement(InputDialog, {
-      title: inputDialogConfig.title,
-      message: inputDialogConfig.message,
-      defaultValue: inputDialogConfig.defaultValue,
-      onConfirm: inputDialogConfig.onConfirm,
-      onCancel: inputDialogConfig.onCancel,
-      colorScheme: c
+      inputDialog: inputDialogConfig,
+      c,
+      t
     }),
 
     // Context menu
@@ -269,6 +486,12 @@ const ReportMaker = () => {
       items: contextMenu.items,
       onClose: () => setContextMenu(null),
       colorScheme: c
+    }),
+
+    // About dialog
+    showAbout && React.createElement(AboutDialog, {
+      c,
+      onClose: () => setShowAbout(false)
     })
   );
 };

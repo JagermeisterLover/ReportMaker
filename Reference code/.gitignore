@@ -1,0 +1,15 @@
+node_modules/
+dist/
+*.log
+.DS_Store
+
+# User data
+surfaces/
+SurfaceExpertData/
+# Temporary conversion files
+tempsurfacedata.txt
+ConvertSettings.txt
+FitReport.txt
+FitMetrics.txt
+FitDeviations.txt
+nul

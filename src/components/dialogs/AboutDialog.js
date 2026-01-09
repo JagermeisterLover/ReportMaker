@@ -1,0 +1,143 @@
+/**
+ * About dialog component
+ * Displays application information, version, and author details
+ */
+
+export function AboutDialog({ c, onClose }) {
+  const { createElement: h, useState, useEffect } = React;
+  const [version, setVersion] = useState('1.0.0');
+
+  useEffect(() => {
+    // Get version from electron API
+    if (window.electronAPI && window.electronAPI.getAppVersion) {
+      window.electronAPI.getAppVersion().then(v => setVersion(v));
+    }
+  }, []);
+
+  return h('div', {
+    style: {
+      position: 'fixed',
+      top: 0,
+      left: 0,
+      right: 0,
+      bottom: 0,
+      backgroundColor: 'rgba(0, 0, 0, 0.7)',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      zIndex: 10000
+    },
+    onClick: onClose
+  },
+    h('div', {
+      style: {
+        backgroundColor: c.panel,
+        border: `1px solid ${c.border}`,
+        borderRadius: '12px',
+        padding: '32px',
+        minWidth: '400px',
+        maxWidth: '500px',
+        boxShadow: '0 8px 32px rgba(0, 0, 0, 0.5)',
+        textAlign: 'center'
+      },
+      onClick: (e) => e.stopPropagation()
+    },
+      // App name
+      h('h2', {
+        style: {
+          margin: '0 0 8px 0',
+          color: c.text,
+          fontSize: '28px',
+          fontWeight: '600',
+          fontFamily: 'system-ui, -apple-system, sans-serif'
+        }
+      }, 'ReportMaker'),
+
+      // Version
+      h('div', {
+        style: {
+          color: c.textDim,
+          fontSize: '14px',
+          marginBottom: '24px'
+        }
+      }, `Version ${version}`),
+
+      // Build date
+      h('div', {
+        style: {
+          color: c.textDim,
+          fontSize: '13px',
+          marginBottom: '8px'
+        }
+      }, `Build: ${new Date().toLocaleDateString('en-US', {
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric'
+      })}`),
+
+      // Divider
+      h('div', {
+        style: {
+          height: '1px',
+          backgroundColor: c.border,
+          margin: '24px 0'
+        }
+      }),
+
+      // Author
+      h('div', {
+        style: {
+          color: c.textDim,
+          fontSize: '13px',
+          marginBottom: '8px'
+        }
+      }, 'Author'),
+
+      h('a', {
+        href: '#',
+        onClick: (e) => {
+          e.preventDefault();
+          if (window.electronAPI && window.electronAPI.openExternal) {
+            window.electronAPI.openExternal('mailto:achapovskyai@gmail.com');
+          }
+        },
+        style: {
+          color: c.accent,
+          fontSize: '14px',
+          textDecoration: 'none',
+          display: 'block',
+          marginBottom: '24px'
+        },
+        onMouseEnter: (e) => {
+          e.target.style.textDecoration = 'underline';
+        },
+        onMouseLeave: (e) => {
+          e.target.style.textDecoration = 'none';
+        }
+      }, 'achapovskyai@gmail.com'),
+
+      // Close button
+      h('button', {
+        onClick: onClose,
+        style: {
+          padding: '10px 32px',
+          backgroundColor: c.accent,
+          color: '#ffffff',
+          border: 'none',
+          borderRadius: '6px',
+          fontSize: '14px',
+          fontWeight: '500',
+          cursor: 'pointer',
+          fontFamily: 'system-ui, -apple-system, sans-serif',
+          transition: 'background-color 0.15s'
+        },
+        onMouseEnter: (e) => {
+          e.target.style.backgroundColor = '#5ba0f2';
+        },
+        onMouseLeave: (e) => {
+          e.target.style.backgroundColor = c.accent;
+        }
+      }, 'Close')
+    )
+  );
+}

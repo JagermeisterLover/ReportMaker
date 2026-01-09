@@ -1,0 +1,41 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm start)",
+      "Bash(npm install:*)",
+      "Bash(npm run dev:*)",
+      "Bash(node -c:*)",
+      "Bash(npx electron . --dev)",
+      "Bash(npm ls:*)",
+      "Bash(node -e:*)",
+      "Bash(git stash:*)",
+      "Bash(cat:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git push:*)",
+      "Bash(git rm:*)",
+      "Bash(mkdir:*)",
+      "Bash(python refactor_script.py:*)",
+      "Bash(node --check:*)",
+      "Bash(start http://localhost:8080/index-modular.html)",
+      "Bash(node:*)",
+      "Bash(taskkill:*)",
+      "Bash(git checkout:*)",
+      "Bash(dir /s /b d:Kalovaya_massaSE4*.png d:Kalovaya_massaSE4*.ico 2)",
+      "Bash(nul)",
+      "Bash(findstr:*)",
+      "Bash(find:*)",
+      "Bash(npm run build:*)",
+      "Bash(dir:*)",
+      "Bash(\"./SurfaceExpert 2.1.0.exe\" --dev)",
+      "Bash(\"./SurfaceExpert 2.1.0.exe\")",
+      "Bash(.gitignore)",
+      "Bash(git revert:*)",
+      "Bash(git restore:*)",
+      "Bash(timeout /t 3)",
+      "Bash(timeout /t 5)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}
