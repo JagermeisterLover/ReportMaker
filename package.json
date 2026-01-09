@@ -1,0 +1,53 @@
+{
+  "name": "report-maker",
+  "version": "1.0.0",
+  "description": "ReportMaker - Optical Report Generation Desktop Application",
+  "main": "src/main.js",
+  "scripts": {
+    "start": "electron .",
+    "dev": "electron . --dev",
+    "build": "cross-env CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder"
+  },
+  "keywords": [
+    "optical",
+    "report",
+    "reportmaker"
+  ],
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "cross-env": "^7.0.3",
+    "electron": "^39.2.3",
+    "electron-builder": "^24.9.1"
+  },
+  "dependencies": {
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0"
+  },
+  "build": {
+    "appId": "com.reportmaker.app",
+    "productName": "ReportMaker",
+    "asar": true,
+    "forceCodeSigning": false,
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
+    "files": [
+      "src/**/*",
+      "node_modules/**/*"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "requestedExecutionLevel": "asInvoker",
+      "sign": null
+    }
+  }
+}
