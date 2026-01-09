@@ -57,16 +57,21 @@ function setupIpcHandlers() {
   // Get app directory path for storing data and settings
   const userDataPath = app.getPath('userData');
   const dataDir = path.join(userDataPath, 'data');
+  const systemsDir = path.join(userDataPath, 'Systems');
   const settingsPath = path.join(userDataPath, 'settings.json');
 
-  // Ensure data directory exists
+  // Ensure directories exist
   if (!fs.existsSync(dataDir)) {
     fs.mkdirSync(dataDir, { recursive: true });
+  }
+  if (!fs.existsSync(systemsDir)) {
+    fs.mkdirSync(systemsDir, { recursive: true });
   }
 
   console.log('=== Storage Paths ===');
   console.log(`User Data Path: ${userDataPath}`);
   console.log(`Data directory: ${dataDir}`);
+  console.log(`Systems directory: ${systemsDir}`);
   console.log(`Settings path: ${settingsPath}`);
   console.log('====================');
 
@@ -121,8 +126,8 @@ function setupIpcHandlers() {
         return {
           success: true,
           settings: {
-            colorscale: 'Viridis',
-            theme: 'dark'
+            theme: 'dark',
+            locale: 'en'
           }
         };
       }
@@ -132,8 +137,8 @@ function setupIpcHandlers() {
         success: false,
         error: err.message,
         settings: {
-          colorscale: 'Viridis',
-          theme: 'dark'
+          theme: 'dark',
+          locale: 'en'
         }
       };
     }
@@ -239,6 +244,139 @@ function setupIpcHandlers() {
         success: false,
         error: err.message
       };
+    }
+  });
+
+  // === Optical Systems Management ===
+
+  // Load folder structure from Systems directory
+  ipcMain.handle('load-systems', async () => {
+    try {
+      const systems = [];
+      const folders = [];
+
+      function scanDirectory(dirPath, relativePath = '') {
+        const entries = fs.readdirSync(dirPath, { withFileTypes: true });
+
+        for (const entry of entries) {
+          const fullPath = path.join(dirPath, entry.name);
+          const relPath = relativePath ? `${relativePath}/${entry.name}` : entry.name;
+
+          if (entry.isDirectory()) {
+            folders.push({
+              name: entry.name,
+              path: relPath,
+              parentPath: relativePath
+            });
+            scanDirectory(fullPath, relPath);
+          } else if (entry.isFile() && entry.name.endsWith('.json')) {
+            try {
+              const content = fs.readFileSync(fullPath, 'utf-8');
+              const system = JSON.parse(content, (key, value) => {
+                // Reviver function to handle Infinity values
+                if (value === 'Infinity' || value === null) {
+                  // Check if the key suggests it should be Infinity
+                  if (key === 'radius' || key === 'thickness') {
+                    return Infinity;
+                  }
+                }
+                return value;
+              });
+              systems.push({
+                ...system,
+                name: entry.name.replace('.json', ''),
+                folderPath: relativePath
+              });
+            } catch (err) {
+              console.error(`Error reading system file ${fullPath}: ${err.message}`);
+            }
+          }
+        }
+      }
+
+      scanDirectory(systemsDir);
+      return { success: true, systems, folders };
+    } catch (err) {
+      console.error(`Error loading systems: ${err.message}`);
+      return { success: false, error: err.message, systems: [], folders: [] };
+    }
+  });
+
+  // Save optical system
+  ipcMain.handle('save-system', async (_event, folderPath, systemName, systemData) => {
+    try {
+      const targetDir = folderPath ? path.join(systemsDir, folderPath) : systemsDir;
+      const filePath = path.join(targetDir, `${systemName}.json`);
+
+      // Replacer function to handle Infinity values
+      const jsonString = JSON.stringify(systemData, (_key, value) => {
+        if (value === Infinity) {
+          return 'Infinity';
+        }
+        return value;
+      }, 2);
+
+      fs.writeFileSync(filePath, jsonString, 'utf-8');
+      console.log(`✅ System saved: ${filePath}`);
+      return { success: true };
+    } catch (err) {
+      console.error(`❌ Error saving system: ${err.message}`);
+      return { success: false, error: err.message };
+    }
+  });
+
+  // Delete optical system
+  ipcMain.handle('delete-system', async (_event, folderPath, systemName) => {
+    try {
+      const targetDir = folderPath ? path.join(systemsDir, folderPath) : systemsDir;
+      const filePath = path.join(targetDir, `${systemName}.json`);
+
+      if (fs.existsSync(filePath)) {
+        fs.unlinkSync(filePath);
+        console.log(`✅ System deleted: ${filePath}`);
+        return { success: true };
+      } else {
+        return { success: false, error: 'System file not found' };
+      }
+    } catch (err) {
+      console.error(`❌ Error deleting system: ${err.message}`);
+      return { success: false, error: err.message };
+    }
+  });
+
+  // Create folder
+  ipcMain.handle('create-folder', async (_event, parentPath, folderName) => {
+    try {
+      const targetDir = parentPath ? path.join(systemsDir, parentPath, folderName) : path.join(systemsDir, folderName);
+
+      if (fs.existsSync(targetDir)) {
+        return { success: false, error: 'Folder already exists' };
+      }
+
+      fs.mkdirSync(targetDir, { recursive: true });
+      console.log(`✅ Folder created: ${targetDir}`);
+      return { success: true };
+    } catch (err) {
+      console.error(`❌ Error creating folder: ${err.message}`);
+      return { success: false, error: err.message };
+    }
+  });
+
+  // Delete folder
+  ipcMain.handle('delete-folder', async (_event, folderPath) => {
+    try {
+      const targetDir = path.join(systemsDir, folderPath);
+
+      if (fs.existsSync(targetDir)) {
+        fs.rmSync(targetDir, { recursive: true, force: true });
+        console.log(`✅ Folder deleted: ${targetDir}`);
+        return { success: true };
+      } else {
+        return { success: false, error: 'Folder not found' };
+      }
+    } catch (err) {
+      console.error(`❌ Error deleting folder: ${err.message}`);
+      return { success: false, error: err.message };
     }
   });
 }

@@ -1,20 +1,27 @@
 // ContentPanel.js - Center panel with tabs and content
 
+import { OpticalSystemTab } from '../tabs/OpticalSystemTab.js';
+import { LDETab } from '../tabs/LDETab.js';
+import { LensesTab } from '../tabs/LensesTab.js';
+import { AutocollimationTab } from '../tabs/AutocollimationTab.js';
+
 export const ContentPanel = ({
-  selectedItem,
+  selectedSystem,
+  setSelectedSystem,
   activeTab,
   onTabChange,
   activeLensTab,
   onLensTabChange,
+  saveCurrentSystem,
   colorScheme
 }) => {
   const c = colorScheme;
 
   // Main tabs
-  const mainTabs = ['Optical System', 'Summary', 'Lenses', 'Autocollimation Points'];
+  const mainTabs = ['Optical System', 'LDE', 'Lenses', 'Autocollimation Points'];
 
   // Generate lens tabs (placeholder - will be dynamic based on actual lenses)
-  const lensTabs = selectedItem?.lenses || ['Lens 1', 'Lens 2', 'Lens 3'];
+  const lensTabs = selectedSystem?.lenses || ['Lens 1', 'Lens 2', 'Lens 3'];
 
   // Render main tabs
   const renderMainTabs = () => {
@@ -23,7 +30,9 @@ export const ContentPanel = ({
         style: {
           display: 'flex',
           borderBottom: `1px solid ${c.border}`,
-          backgroundColor: c.panel
+          backgroundColor: c.panel,
+          gap: '2px',
+          padding: '8px 8px 0 8px'
         }
       },
       mainTabs.map(tab =>
@@ -32,21 +41,26 @@ export const ContentPanel = ({
             key: tab,
             onClick: () => onTabChange(tab),
             style: {
-              padding: '12px 20px',
+              padding: '8px 16px',
               cursor: 'pointer',
-              borderBottom: activeTab === tab ? `2px solid ${c.accent}` : 'none',
+              backgroundColor: activeTab === tab ? c.bg : 'transparent',
+              borderTopLeftRadius: '4px',
+              borderTopRightRadius: '4px',
+              borderBottom: activeTab === tab ? 'none' : `1px solid ${c.border}`,
+              fontSize: '13px',
+              fontWeight: activeTab === tab ? '600' : '400',
               color: activeTab === tab ? c.text : c.textDim,
-              fontWeight: activeTab === tab ? 'bold' : 'normal',
-              fontSize: '14px',
               transition: 'all 0.2s'
             },
             onMouseEnter: (e) => {
               if (activeTab !== tab) {
-                e.target.style.backgroundColor = c.hover;
+                e.currentTarget.style.backgroundColor = c.hover;
               }
             },
             onMouseLeave: (e) => {
-              e.target.style.backgroundColor = 'transparent';
+              if (activeTab !== tab) {
+                e.currentTarget.style.backgroundColor = 'transparent';
+              }
             }
           },
           tab
@@ -104,7 +118,7 @@ export const ContentPanel = ({
 
   // Render tab content
   const renderTabContent = () => {
-    if (!selectedItem) {
+    if (!selectedSystem) {
       return React.createElement('div',
         {
           style: {
@@ -115,119 +129,42 @@ export const ContentPanel = ({
         },
         React.createElement('div',
           { style: { fontSize: '18px', marginBottom: '10px' } },
-          'No item selected'
+          'No optical system selected'
         ),
         React.createElement('div',
           { style: { fontSize: '14px' } },
-          'Select or create an item from the left panel'
+          'Select or create a system from the left panel'
         )
       );
     }
 
     switch (activeTab) {
       case 'Optical System':
-        return renderOpticalSystemTab();
-      case 'Summary':
-        return renderSummaryTab();
+        return React.createElement(OpticalSystemTab, {
+          selectedSystem,
+          setSelectedSystem,
+          saveCurrentSystem,
+          colorScheme: c
+        });
+      case 'LDE':
+        return React.createElement(LDETab, {
+          selectedSystem,
+          setSelectedSystem,
+          saveCurrentSystem,
+          colorScheme: c
+        });
       case 'Lenses':
-        return renderLensesTab();
+        return React.createElement(LensesTab, {
+          activeLensTab,
+          colorScheme: c
+        });
       case 'Autocollimation Points':
-        return renderAutocollimationTab();
+        return React.createElement(AutocollimationTab, {
+          colorScheme: c
+        });
       default:
         return null;
     }
-  };
-
-  // Optical System tab content (placeholder)
-  const renderOpticalSystemTab = () => {
-    return React.createElement('div',
-      { style: { padding: '20px' } },
-      React.createElement('h2',
-        { style: { color: c.text, marginBottom: '20px' } },
-        'Optical System'
-      ),
-      React.createElement('div',
-        {
-          style: {
-            padding: '40px',
-            backgroundColor: c.panel,
-            borderRadius: '8px',
-            textAlign: 'center',
-            color: c.textDim
-          }
-        },
-        'Optical system configuration will be displayed here'
-      )
-    );
-  };
-
-  // Summary tab content (placeholder)
-  const renderSummaryTab = () => {
-    return React.createElement('div',
-      { style: { padding: '20px' } },
-      React.createElement('h2',
-        { style: { color: c.text, marginBottom: '20px' } },
-        'Summary'
-      ),
-      React.createElement('div',
-        {
-          style: {
-            padding: '40px',
-            backgroundColor: c.panel,
-            borderRadius: '8px',
-            textAlign: 'center',
-            color: c.textDim
-          }
-        },
-        'Summary information will be displayed here'
-      )
-    );
-  };
-
-  // Lenses tab content (placeholder)
-  const renderLensesTab = () => {
-    return React.createElement('div',
-      { style: { padding: '20px' } },
-      React.createElement('h2',
-        { style: { color: c.text, marginBottom: '20px' } },
-        activeLensTab || 'Lens 1'
-      ),
-      React.createElement('div',
-        {
-          style: {
-            padding: '40px',
-            backgroundColor: c.panel,
-            borderRadius: '8px',
-            textAlign: 'center',
-            color: c.textDim
-          }
-        },
-        `Lens details for ${activeLensTab || 'Lens 1'} will be displayed here`
-      )
-    );
-  };
-
-  // Autocollimation Points tab content (placeholder)
-  const renderAutocollimationTab = () => {
-    return React.createElement('div',
-      { style: { padding: '20px' } },
-      React.createElement('h2',
-        { style: { color: c.text, marginBottom: '20px' } },
-        'Autocollimation Points'
-      ),
-      React.createElement('div',
-        {
-          style: {
-            padding: '40px',
-            backgroundColor: c.panel,
-            borderRadius: '8px',
-            textAlign: 'center',
-            color: c.textDim
-          }
-        },
-        'Autocollimation points data will be displayed here'
-      )
-    );
   };
 
   // Main render

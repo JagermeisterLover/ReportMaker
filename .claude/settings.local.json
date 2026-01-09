@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(dir:*)",
+      "Bash(where /r \"d:\\\\Kalovaya_massa\\\\ReportMaker-1\\\\Reference code\" AboutDialog.js)",
+      "Bash(npm start)",
+      "Bash(node -c:*)",
+      "Bash(node test/testGlassCalculator.js:*)",
+      "Bash(node test/testCatalogColumn.js:*)"
+    ]
+  }
+}

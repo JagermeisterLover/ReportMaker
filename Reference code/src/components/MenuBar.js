@@ -3,49 +3,47 @@
  * Replaces the default OS menu bar with a modern, integrated design
  */
 
-export function MenuBar({ c, onMenuAction }) {
+export function MenuBar({ c, onMenuAction, t }) {
   const [openMenu, setOpenMenu] = React.useState(null);
   const [menuPosition, setMenuPosition] = React.useState({ x: 0, y: 0 });
 
-  // Menu structure (simple English labels for wireframe)
+  // Menu structure (using translation object)
   const menus = {
-    'File': [
-      { label: 'Export HTML Report', action: 'export-html', shortcut: 'Ctrl+E' },
-      { label: 'Export PDF Report', action: 'export-pdf', shortcut: 'Ctrl+P' }
+    [t.menu.file]: [
+      { label: t.menu.importZMX, action: 'import-zmx', shortcut: 'Ctrl+I' }
     ],
-    'Edit': [
-      { label: 'Rename Item', action: 'rename-item', shortcut: 'F2' },
-      { label: 'Delete Item', action: 'delete-item', shortcut: 'Delete' }
+    [t.menu.reports]: [
+      { label: t.menu.exportHTMLReport, action: 'export-html-report', shortcut: 'Ctrl+E' },
+      { label: t.menu.exportPDFReport, action: 'export-pdf-report', shortcut: 'Ctrl+P' }
     ],
-    'View': [
-      { label: 'Refresh', action: 'refresh', shortcut: 'F5' },
+    [t.menu.view]: [
+      { label: t.menu.reload, action: 'reload', shortcut: 'Ctrl+R' },
+      { label: t.menu.toggleDevTools, action: 'toggle-devtools', shortcut: 'Ctrl+Shift+I' },
       { type: 'separator' },
-      { label: 'Toggle DevTools', action: 'toggle-devtools', shortcut: 'Ctrl+Shift+I' }
+      { label: t.menu.toggleFullscreen, action: 'toggleFullscreen', shortcut: 'F11' }
     ],
-    'Settings': [
-      { label: 'Preferences', action: 'settings', shortcut: 'Ctrl+,' }
+    [t.menu.tools]: [
+      { label: t.menu.settings, action: 'open-settings', shortcut: 'Ctrl+,' }
     ],
-    'Help': [
-      { label: 'Documentation', action: 'documentation' },
+    [t.menu.help]: [
+      { label: t.menu.documentation, action: 'documentation' },
+      { label: t.menu.checkForUpdates || 'Check for Updates', action: 'check-for-updates' },
       { type: 'separator' },
-      { label: 'About', action: 'about' }
+      { label: t.menu.about, action: 'about' }
     ]
   };
 
   const handleMenuClick = (menuName, event) => {
-    console.log('MenuBar handleMenuClick called with menuName:', menuName);
     if (openMenu === menuName) {
       setOpenMenu(null);
     } else {
       const rect = event.currentTarget.getBoundingClientRect();
       setMenuPosition({ x: rect.left, y: rect.bottom });
       setOpenMenu(menuName);
-      console.log('Menu opened:', menuName, 'at position:', { x: rect.left, y: rect.bottom });
     }
   };
 
   const handleItemClick = (action) => {
-    console.log('MenuBar handleItemClick called with action:', action);
     setOpenMenu(null);
     if (action === 'reload') {
       window.location.reload();
@@ -92,25 +90,38 @@ export function MenuBar({ c, onMenuAction }) {
       WebkitAppRegion: 'drag' // Make draggable on Windows
     }
   },
-    // App name
+    // App icon and name
     React.createElement('div', {
       style: {
         display: 'flex',
         alignItems: 'center',
-        marginRight: '20px',
+        gap: '8px',
+        marginRight: '12px',
         WebkitAppRegion: 'no-drag'
       }
     },
+      // Icon
+      React.createElement('img', {
+        src: '../icons/IconInvertedNoBGGlow.png',
+        alt: 'SurfaceExpert',
+        style: {
+          width: '36px',
+          height: '36px',
+          objectFit: 'contain'
+        }
+      }),
       // Program name
       React.createElement('span', {
         style: {
-          fontSize: '16px',
-          fontWeight: '600',
+          fontSize: '16px',           // Slightly larger for hierarchy
+          fontWeight: '600',          // Bolder
           color: c.text,
+          // Prioritize Inter, then nice system fonts
           fontFamily: 'system-ui, -apple-system, sans-serif',
-          letterSpacing: '-0.5px'
+          letterSpacing: '-0.5px',    // Tighter tracking looks more professional
+          textShadow: '0 1px 2px rgba(0,0,0,0.2)' // Subtle depth
         }
-      }, 'ReportMaker')
+      }, 'SurfaceExpert')
     ),
 
     // Menu items
