@@ -7,6 +7,7 @@ import { SettingsModal } from './components/dialogs/SettingsModal.js';
 import { InputDialog } from './components/dialogs/InputDialog.js';
 import { ContextMenu } from './components/dialogs/ContextMenu.js';
 import { getPalette } from './constants/colorPalettes.js';
+import { getTranslations } from './constants/locales.js';
 
 const ReportMaker = () => {
   // State management
@@ -20,14 +21,20 @@ const ReportMaker = () => {
   const [showInputDialog, setShowInputDialog] = React.useState(false);
   const [inputDialogConfig, setInputDialogConfig] = React.useState(null);
   const [contextMenu, setContextMenu] = React.useState(null);
-  const [settings, setSettings] = React.useState({
-    colorscale: 'Viridis',
-    theme: 'dark'
-  });
+
+  // Settings state (individual state variables for Settings modal)
+  const [colorscale, setColorscale] = React.useState('Viridis');
+  const [wavelength, setWavelength] = React.useState(632.8);
+  const [gridSize3D, setGridSize3D] = React.useState(129);
+  const [gridSize2D, setGridSize2D] = React.useState(513);
+  const [theme, setTheme] = React.useState('dark');
+  const [locale, setLocale] = React.useState('en');
+  const [fastConvertThreshold, setFastConvertThreshold] = React.useState(0.000001);
   const [nextItemId, setNextItemId] = React.useState(1);
 
-  // Color scheme
-  const c = getPalette(settings.theme || 'dark');
+  // Color scheme and translations
+  const c = getPalette(theme);
+  const t = getTranslations(locale);
 
   // Menu action handler
   const handleMenuAction = React.useCallback((action) => {
@@ -246,10 +253,23 @@ const ReportMaker = () => {
 
     // Settings modal
     showSettings && React.createElement(SettingsModal, {
+      colorscale,
+      setColorscale,
+      wavelength,
+      setWavelength,
+      gridSize3D,
+      setGridSize3D,
+      gridSize2D,
+      setGridSize2D,
+      theme,
+      setTheme,
+      locale,
+      setLocale,
+      fastConvertThreshold,
+      setFastConvertThreshold,
       onClose: () => setShowSettings(false),
-      settings,
-      onSettingsChange: setSettings,
-      colorScheme: c
+      c,
+      t
     }),
 
     // Input dialog
