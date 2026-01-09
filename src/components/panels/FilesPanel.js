@@ -7,86 +7,31 @@ export const FilesPanel = ({
   onRenameSystem,
   onDeleteSystem,
   onCreateSystem,
-  folders = [],
-  expandedFolders = new Set(),
-  onToggleFolder,
   onShowContextMenu,
   colorScheme,
   onImportZemax
 }) => {
   const c = colorScheme;
 
-  // Render folder tree
-  const renderFolderTree = (parentPath = '', level = 0) => {
-    // Get folders at this level
-    const childFolders = folders.filter(f => f.parentPath === parentPath);
-    // Get systems at this level
-    const folderSystems = systems.filter(s => (s.folderPath || '') === parentPath);
-
+  // Render systems list (no folder tree)
+  const renderSystemsList = () => {
     const elements = [];
 
-    // Render folders
-    childFolders.forEach(folder => {
-      const isExpanded = expandedFolders.has(folder.path);
-      const hasChildren = folders.some(f => f.parentPath === folder.path) ||
-                         systems.some(s => s.folderPath === folder.path);
-
-      elements.push(
-        React.createElement('div',
-          { key: `folder-${folder.path}` },
-          React.createElement('div',
-            {
-              style: {
-                display: 'flex',
-                alignItems: 'center',
-                padding: '6px 8px',
-                paddingLeft: `${8 + level * 16}px`,
-                cursor: 'pointer',
-                backgroundColor: c.panel,
-                borderRadius: '4px',
-                marginBottom: '2px'
-              },
-              onClick: () => onToggleFolder(folder.path),
-              onContextMenu: (e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                onShowContextMenu(e, 'folder', folder);
-              }
-            },
-            React.createElement('span',
-              { style: { marginRight: '4px', color: c.textDim, fontSize: '10px' } },
-              isExpanded ? '▼' : '▶'
-            ),
-            React.createElement('span',
-              { style: { marginRight: '6px', fontSize: '14px' } },
-              '📁'
-            ),
-            React.createElement('span',
-              { style: { color: c.text, fontSize: '13px' } },
-              folder.name
-            )
-          ),
-          isExpanded && hasChildren && renderFolderTree(folder.path, level + 1)
-        )
-      );
-    });
-
-    // Render systems
-    folderSystems.forEach(system => {
+    // Render all systems in a flat list
+    systems.forEach(system => {
       elements.push(
         React.createElement('div',
           {
-            key: `system-${system.name}-${system.folderPath || ''}`,
+            key: `system-${system.name}`,
             style: {
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'space-between',
               padding: '6px 8px',
-              paddingLeft: `${8 + level * 16 + (childFolders.length > 0 ? 16 : 0)}px`,
-              backgroundColor: selectedSystem?.name === system.name && selectedSystem?.folderPath === system.folderPath ? c.hover : 'transparent',
+              backgroundColor: selectedSystem?.name === system.name ? c.hover : 'transparent',
               borderRadius: '4px',
               marginBottom: '2px',
-              borderLeft: selectedSystem?.name === system.name && selectedSystem?.folderPath === system.folderPath ? `2px solid ${c.accent}` : 'none'
+              borderLeft: selectedSystem?.name === system.name ? `2px solid ${c.accent}` : 'none'
             },
             onContextMenu: (e) => {
               e.preventDefault();
@@ -227,7 +172,7 @@ export const FilesPanel = ({
             React.createElement('br'),
             'Click "New System" to get started'
           )
-        : renderFolderTree()
+        : renderSystemsList()
     )
   );
 };

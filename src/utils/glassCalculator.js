@@ -192,14 +192,31 @@ export function calculateRefractiveIndex(glassName, wavelengthNm) {
  * Calculate refractive index and get catalog info for a given glass
  * @param {string} glassName - Name of the glass (e.g., "N-BK7", "SCHOTT:N-BK7")
  * @param {number} wavelengthNm - Wavelength in nanometers
- * @returns {Object|null} Object with {n: number, catalog: string} or null if glass not found
+ * @returns {Object|null} Object with {n: number, catalog: string, correctName: string} or null if glass not found
  */
 export function calculateRefractiveIndexWithCatalog(glassName, wavelengthNm) {
   // Convert wavelength from nanometers to micrometers
   const lambda = wavelengthNm / 1000;
 
-  // Look up glass in database
-  const glassData = glassDatabase.get(glassName);
+  // Look up glass in database (case-sensitive first)
+  let glassData = glassDatabase.get(glassName);
+  let correctName = glassName;
+
+  // If not found, try case-insensitive search
+  if (!glassData) {
+    const lowerGlassName = glassName.toLowerCase();
+    for (const [key, value] of glassDatabase.entries()) {
+      // Skip catalog-prefixed entries (those with ":")
+      if (key.includes(':')) continue;
+
+      if (key.toLowerCase() === lowerGlassName) {
+        glassData = value;
+        correctName = key; // Use the correct capitalization from the catalog
+        break;
+      }
+    }
+  }
+
   if (!glassData) {
     return null;
   }
@@ -226,7 +243,7 @@ export function calculateRefractiveIndexWithCatalog(glassName, wavelengthNm) {
         return null;
     }
 
-    return { n, catalog };
+    return { n, catalog, correctName };
   } catch (error) {
     console.error(`Error calculating refractive index for ${glassName}:`, error);
     return null;

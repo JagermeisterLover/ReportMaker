@@ -21,8 +21,6 @@ const ReportMaker = () => {
   const [selectedSystem, setSelectedSystem] = React.useState(null);
   const [activeTab, setActiveTab] = React.useState('Optical System');
   const [activeLensTab, setActiveLensTab] = React.useState('Lens 1');
-  const [folders, setFolders] = React.useState([]);
-  const [expandedFolders, setExpandedFolders] = React.useState(new Set());
   const [showSettings, setShowSettings] = React.useState(false);
   const [showAbout, setShowAbout] = React.useState(false);
   const [showInputDialog, setShowInputDialog] = React.useState(false);
@@ -68,7 +66,6 @@ const ReportMaker = () => {
       const result = await window.electronAPI.loadSystems();
       if (result.success) {
         setSystems(result.systems);
-        setFolders(result.folders);
       }
     }
   };
@@ -115,9 +112,9 @@ const ReportMaker = () => {
         if (updatedSystem !== selectedSystem) {
           lastProcessedSystemRef.current = updatedSystem;
           setSelectedSystem(updatedSystem);
-          // Save the updated system
+          // Save the updated system (folderPath removed, systems now have their own folders)
           if (window.electronAPI && window.electronAPI.saveSystem) {
-            window.electronAPI.saveSystem('', updatedSystem.name, updatedSystem);
+            window.electronAPI.saveSystem(null, updatedSystem.name, updatedSystem);
           }
         }
       } else {
@@ -126,6 +123,23 @@ const ReportMaker = () => {
       }
     }
   }, [selectedSystem?.name]); // Only run when system name changes
+
+  // Reset active lens tab if it's out of bounds when lenses change
+  React.useEffect(() => {
+    if (selectedSystem?.lenses && selectedSystem.lenses.length > 0) {
+      const lensIndex = activeLensTab ? parseInt(activeLensTab.replace('Lens ', '')) - 1 : 0;
+
+      // If the current lens tab is out of bounds, reset to Lens 1
+      if (lensIndex >= selectedSystem.lenses.length) {
+        setActiveLensTab('Lens 1');
+      } else if (lensIndex < 0 || !activeLensTab) {
+        setActiveLensTab('Lens 1');
+      }
+    } else if (selectedSystem?.lenses && selectedSystem.lenses.length === 0) {
+      // No lenses, but keep the state for when lenses are added
+      setActiveLensTab('Lens 1');
+    }
+  }, [selectedSystem?.lenses?.length, activeLensTab]);
 
   // Save settings whenever they change
   React.useEffect(() => {
@@ -162,7 +176,7 @@ const ReportMaker = () => {
     console.log('Creating system:', newSystem);
 
     if (window.electronAPI && window.electronAPI.saveSystem) {
-      const result = await window.electronAPI.saveSystem('', name, newSystem);
+      const result = await window.electronAPI.saveSystem(null, name, newSystem);
       console.log('Save result:', result);
       if (result.success) {
         await loadSystems();
@@ -173,7 +187,7 @@ const ReportMaker = () => {
 
   const handleDeleteSystem = React.useCallback(async (system) => {
     if (window.electronAPI && window.electronAPI.deleteSystem) {
-      const result = await window.electronAPI.deleteSystem(system.folderPath || '', system.name);
+      const result = await window.electronAPI.deleteSystem(null, system.name);
       if (result.success) {
         await loadSystems();
         if (selectedSystem?.name === system.name) {
@@ -190,11 +204,11 @@ const ReportMaker = () => {
       defaultValue: system.name,
       onConfirm: async (newName) => {
         if (window.electronAPI && window.electronAPI.deleteSystem && window.electronAPI.saveSystem) {
-          // Delete old file
-          await window.electronAPI.deleteSystem(system.folderPath || '', system.name);
-          // Save with new name
+          // Delete old system directory
+          await window.electronAPI.deleteSystem(null, system.name);
+          // Save with new name (creates new system directory)
           const updatedSystem = { ...system, name: newName };
-          await window.electronAPI.saveSystem(system.folderPath || '', newName, updatedSystem);
+          await window.electronAPI.saveSystem(null, newName, updatedSystem);
           await loadSystems();
           setSelectedSystem(updatedSystem);
         }
@@ -212,13 +226,26 @@ const ReportMaker = () => {
   // Save current system data
   const saveCurrentSystem = React.useCallback(async () => {
     if (selectedSystem && window.electronAPI && window.electronAPI.saveSystem) {
+      const systemName = selectedSystem.name;
       await window.electronAPI.saveSystem(
-        selectedSystem.folderPath || '',
-        selectedSystem.name,
+        null,
+        systemName,
         selectedSystem
       );
+
+      // Reload systems to get the updated lens data
+      await loadSystems();
+
+      // Re-select the system to get the updated version with lenses
+      const result = await window.electronAPI.loadSystems();
+      if (result.success) {
+        const updatedSystem = result.systems.find(s => s.name === systemName);
+        if (updatedSystem) {
+          setSelectedSystem(updatedSystem);
+        }
+      }
     }
-  }, [selectedSystem]);
+  }, [selectedSystem, loadSystems]);
 
   // Import from Zemax file
   const handleImportZemax = React.useCallback(async () => {
@@ -252,7 +279,7 @@ const ReportMaker = () => {
 
               // Save the system
               if (window.electronAPI.saveSystem) {
-                const saveResult = await window.electronAPI.saveSystem('', parsedData.name, newSystem);
+                const saveResult = await window.electronAPI.saveSystem(null, parsedData.name, newSystem);
                 if (saveResult.success) {
                   await loadSystems();
                   setSelectedSystem(newSystem);
@@ -333,17 +360,6 @@ const ReportMaker = () => {
     }
   }, [handleMenuAction]);
 
-  // Toggle folder expansion
-  const handleToggleFolder = (folderId) => {
-    const newExpanded = new Set(expandedFolders);
-    if (newExpanded.has(folderId)) {
-      newExpanded.delete(folderId);
-    } else {
-      newExpanded.add(folderId);
-    }
-    setExpandedFolders(newExpanded);
-  };
-
   // Context menu handler
   const handleShowContextMenu = (event, type, target) => {
     event.preventDefault();
@@ -364,19 +380,6 @@ const ReportMaker = () => {
           label: 'Delete',
           onClick: () => {
             handleDeleteSystem(target);
-            setContextMenu(null);
-          }
-        }
-      ];
-    } else if (type === 'folder') {
-      menuItems = [
-        {
-          label: 'Delete Folder',
-          onClick: async () => {
-            if (window.electronAPI && window.electronAPI.deleteFolder) {
-              await window.electronAPI.deleteFolder(target.path);
-              await loadSystems();
-            }
             setContextMenu(null);
           }
         }
@@ -440,9 +443,6 @@ const ReportMaker = () => {
         onRenameSystem: handleRenameSystem,
         onDeleteSystem: handleDeleteSystem,
         onCreateSystem: handleCreateSystem,
-        folders,
-        expandedFolders,
-        onToggleFolder: handleToggleFolder,
         onShowContextMenu: handleShowContextMenu,
         colorScheme: c,
         onImportZemax: handleImportZemax

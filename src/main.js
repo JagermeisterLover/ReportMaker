@@ -249,75 +249,144 @@ function setupIpcHandlers() {
 
   // === Optical Systems Management ===
 
-  // Load folder structure from Systems directory
+  // Load optical systems from Systems directory
+  // Each system is a folder containing system.json and lens_N.json files
   ipcMain.handle('load-systems', async () => {
     try {
       const systems = [];
-      const folders = [];
 
-      function scanDirectory(dirPath, relativePath = '') {
+      function scanDirectory(dirPath) {
         const entries = fs.readdirSync(dirPath, { withFileTypes: true });
 
         for (const entry of entries) {
           const fullPath = path.join(dirPath, entry.name);
-          const relPath = relativePath ? `${relativePath}/${entry.name}` : entry.name;
 
           if (entry.isDirectory()) {
-            folders.push({
-              name: entry.name,
-              path: relPath,
-              parentPath: relativePath
-            });
-            scanDirectory(fullPath, relPath);
-          } else if (entry.isFile() && entry.name.endsWith('.json')) {
-            try {
-              const content = fs.readFileSync(fullPath, 'utf-8');
-              const system = JSON.parse(content, (key, value) => {
-                // Reviver function to handle Infinity values
-                if (value === 'Infinity' || value === null) {
-                  // Check if the key suggests it should be Infinity
-                  if (key === 'radius' || key === 'thickness') {
-                    return Infinity;
+            // Each directory is a potential system
+            const systemJsonPath = path.join(fullPath, 'system.json');
+
+            if (fs.existsSync(systemJsonPath)) {
+              try {
+                const content = fs.readFileSync(systemJsonPath, 'utf-8');
+                const system = JSON.parse(content, (key, value) => {
+                  // Reviver function to handle Infinity values
+                  if (value === 'Infinity' || value === null) {
+                    if (key === 'radius' || key === 'thickness') {
+                      return Infinity;
+                    }
                   }
+                  return value;
+                });
+
+                // Load lens JSON files
+                const lenses = [];
+                const lensFiles = fs.readdirSync(fullPath)
+                  .filter(file => file.startsWith('lens_') && file.endsWith('.json'))
+                  .sort((a, b) => {
+                    const numA = parseInt(a.match(/lens_(\d+)\.json/)?.[1] || '0');
+                    const numB = parseInt(b.match(/lens_(\d+)\.json/)?.[1] || '0');
+                    return numA - numB;
+                  });
+
+                for (const lensFile of lensFiles) {
+                  const lensPath = path.join(fullPath, lensFile);
+                  const lensContent = fs.readFileSync(lensPath, 'utf-8');
+                  const lensData = JSON.parse(lensContent, (key, value) => {
+                    if (value === 'Infinity' || value === null) {
+                      if (key === 'radius' || key === 'thickness') {
+                        return Infinity;
+                      }
+                    }
+                    return value;
+                  });
+                  lenses.push(lensData);
                 }
-                return value;
-              });
-              systems.push({
-                ...system,
-                name: entry.name.replace('.json', ''),
-                folderPath: relativePath
-              });
-            } catch (err) {
-              console.error(`Error reading system file ${fullPath}: ${err.message}`);
+
+                systems.push({
+                  ...system,
+                  name: entry.name,
+                  lenses
+                });
+              } catch (err) {
+                console.error(`Error reading system ${fullPath}: ${err.message}`);
+              }
             }
           }
         }
       }
 
       scanDirectory(systemsDir);
-      return { success: true, systems, folders };
+      return { success: true, systems };
     } catch (err) {
       console.error(`Error loading systems: ${err.message}`);
-      return { success: false, error: err.message, systems: [], folders: [] };
+      return { success: false, error: err.message, systems: [] };
     }
   });
 
-  // Save optical system
-  ipcMain.handle('save-system', async (_event, folderPath, systemName, systemData) => {
+  // Save optical system with separate lens JSONs
+  ipcMain.handle('save-system', async (_event, _folderPath, systemName, systemData) => {
     try {
-      const targetDir = folderPath ? path.join(systemsDir, folderPath) : systemsDir;
-      const filePath = path.join(targetDir, `${systemName}.json`);
+      const systemDir = path.join(systemsDir, systemName);
 
-      // Replacer function to handle Infinity values
-      const jsonString = JSON.stringify(systemData, (_key, value) => {
+      // Create system directory if it doesn't exist
+      if (!fs.existsSync(systemDir)) {
+        fs.mkdirSync(systemDir, { recursive: true });
+      }
+
+      // Extract lenses from LDE data using lens extraction logic
+      const lenses = extractLensesFromLDE(systemData.ldeData);
+
+      // Save main system.json (without individual lens data)
+      const systemJsonPath = path.join(systemDir, 'system.json');
+      const systemJson = {
+        description: systemData.description || '',
+        wavelength: systemData.wavelength || 550,
+        createdAt: systemData.createdAt || Date.now(),
+        ldeData: systemData.ldeData || []
+      };
+
+      const systemJsonString = JSON.stringify(systemJson, (_key, value) => {
         if (value === Infinity) {
           return 'Infinity';
         }
         return value;
       }, 2);
 
-      fs.writeFileSync(filePath, jsonString, 'utf-8');
-      console.log(`✅ System saved: ${filePath}`);
+      fs.writeFileSync(systemJsonPath, systemJsonString, 'utf-8');
+
+      // Remove old lens JSON files
+      const existingFiles = fs.readdirSync(systemDir);
+      for (const file of existingFiles) {
+        if (file.startsWith('lens_') && file.endsWith('.json')) {
+          fs.unlinkSync(path.join(systemDir, file));
+        }
+      }
+
+      // Save individual lens JSON files
+      for (let i = 0; i < lenses.length; i++) {
+        const lens = lenses[i];
+        const lensJsonPath = path.join(systemDir, `lens_${i + 1}.json`);
+        const lensJson = {
+          systemName,
+          lensNumber: i + 1,
+          wavelength: systemData.wavelength || 550,
+          ldeData: lens.surfaces.map((surface, index) => ({
+            ...surface,
+            surface: index
+          }))
+        };
+
+        const lensJsonString = JSON.stringify(lensJson, (_key, value) => {
+          if (value === Infinity) {
+            return 'Infinity';
+          }
+          return value;
+        }, 2);
+
+        fs.writeFileSync(lensJsonPath, lensJsonString, 'utf-8');
+      }
+
+      console.log(`✅ System saved: ${systemDir} with ${lenses.length} lenses`);
       return { success: true };
     } catch (err) {
       console.error(`❌ Error saving system: ${err.message}`);
@@ -325,57 +394,57 @@ function setupIpcHandlers() {
     }
   });
 
-  // Delete optical system
-  ipcMain.handle('delete-system', async (_event, folderPath, systemName) => {
-    try {
-      const targetDir = folderPath ? path.join(systemsDir, folderPath) : systemsDir;
-      const filePath = path.join(targetDir, `${systemName}.json`);
+  // Helper function to extract lenses from LDE data
+  function extractLensesFromLDE(ldeData) {
+    if (!ldeData || ldeData.length === 0) {
+      return [];
+    }
 
-      if (fs.existsSync(filePath)) {
-        fs.unlinkSync(filePath);
-        console.log(`✅ System deleted: ${filePath}`);
+    const lenses = [];
+    let i = 0;
+
+    while (i < ldeData.length) {
+      const surface = ldeData[i];
+
+      const hasMaterial = surface.material && surface.material.trim() !== '';
+      const hasRefractiveIndex = surface.n && surface.n !== '' && surface.n !== '1.000000';
+
+      if (hasMaterial || hasRefractiveIndex) {
+        if (i + 1 < ldeData.length) {
+          const firstSurface = surface;
+          const secondSurface = ldeData[i + 1];
+
+          lenses.push({
+            lensNumber: lenses.length + 1,
+            surfaces: [firstSurface, secondSurface]
+          });
+
+          i += 1; // Move to next surface (handles cemented doublets)
+        } else {
+          i++;
+        }
+      } else {
+        i++;
+      }
+    }
+
+    return lenses;
+  }
+
+  // Delete optical system (removes entire system directory)
+  ipcMain.handle('delete-system', async (_event, _folderPath, systemName) => {
+    try {
+      const systemDir = path.join(systemsDir, systemName);
+
+      if (fs.existsSync(systemDir)) {
+        fs.rmSync(systemDir, { recursive: true, force: true });
+        console.log(`✅ System deleted: ${systemDir}`);
         return { success: true };
       } else {
-        return { success: false, error: 'System file not found' };
+        return { success: false, error: 'System not found' };
       }
     } catch (err) {
       console.error(`❌ Error deleting system: ${err.message}`);
-      return { success: false, error: err.message };
-    }
-  });
-
-  // Create folder
-  ipcMain.handle('create-folder', async (_event, parentPath, folderName) => {
-    try {
-      const targetDir = parentPath ? path.join(systemsDir, parentPath, folderName) : path.join(systemsDir, folderName);
-
-      if (fs.existsSync(targetDir)) {
-        return { success: false, error: 'Folder already exists' };
-      }
-
-      fs.mkdirSync(targetDir, { recursive: true });
-      console.log(`✅ Folder created: ${targetDir}`);
-      return { success: true };
-    } catch (err) {
-      console.error(`❌ Error creating folder: ${err.message}`);
-      return { success: false, error: err.message };
-    }
-  });
-
-  // Delete folder
-  ipcMain.handle('delete-folder', async (_event, folderPath) => {
-    try {
-      const targetDir = path.join(systemsDir, folderPath);
-
-      if (fs.existsSync(targetDir)) {
-        fs.rmSync(targetDir, { recursive: true, force: true });
-        console.log(`✅ Folder deleted: ${targetDir}`);
-        return { success: true };
-      } else {
-        return { success: false, error: 'Folder not found' };
-      }
-    } catch (err) {
-      console.error(`❌ Error deleting folder: ${err.message}`);
       return { success: false, error: err.message };
     }
   });

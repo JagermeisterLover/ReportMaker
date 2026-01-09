@@ -42,7 +42,22 @@ export async function loadCatalog(catalogName) {
       throw new Error(`HTTP error! status: ${response.status}`);
     }
 
-    const content = await response.text();
+    // Get the raw buffer to detect encoding
+    const buffer = await response.arrayBuffer();
+    const uint8Array = new Uint8Array(buffer);
+
+    let content;
+    // Check for UTF-16 LE BOM (FF FE)
+    if (uint8Array.length >= 2 && uint8Array[0] === 0xFF && uint8Array[1] === 0xFE) {
+      // UTF-16 LE encoding
+      const decoder = new TextDecoder('utf-16le');
+      content = decoder.decode(buffer);
+    } else {
+      // Default to UTF-8
+      const decoder = new TextDecoder('utf-8');
+      content = decoder.decode(buffer);
+    }
+
     parseAGFCatalog(content, catalogName);
     console.log(`Loaded glass catalog: ${catalogName}`);
     return true;

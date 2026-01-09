@@ -20,8 +20,8 @@ export const ContentPanel = ({
   // Main tabs
   const mainTabs = ['Optical System', 'LDE', 'Lenses', 'Autocollimation Points'];
 
-  // Generate lens tabs (placeholder - will be dynamic based on actual lenses)
-  const lensTabs = selectedSystem?.lenses || ['Lens 1', 'Lens 2', 'Lens 3'];
+  // Generate lens tabs dynamically from lenses array
+  const lensTabs = selectedSystem?.lenses?.map((lens, index) => `Lens ${index + 1}`) || [];
 
   // Render main tabs
   const renderMainTabs = () => {
@@ -155,6 +155,7 @@ export const ContentPanel = ({
         });
       case 'Lenses':
         return React.createElement(LensesTab, {
+          selectedSystem,
           activeLensTab,
           colorScheme: c
         });

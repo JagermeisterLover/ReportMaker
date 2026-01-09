@@ -15,10 +15,34 @@ export const LDETab = ({ selectedSystem, setSelectedSystem, saveCurrentSystem, c
   const [isRowDragging, setIsRowDragging] = React.useState(false);
   const [rowDragStart, setRowDragStart] = React.useState(null);
   const inputRefs = React.useRef({});
+  const pendingMaterialLookup = React.useRef({});
 
   const columns = ['stop', 'radius', 'thickness', 'material', 'catalog', 'n', 'semiDiameter', 'diameter'];
 
   const getCellKey = (row, col) => `${row}-${col}`;
+
+  const performMaterialLookup = (rowIndex, materialValue) => {
+    const wavelength = selectedSystem.wavelength || 550;
+    const result = calculateRefractiveIndexWithCatalog(materialValue, wavelength);
+
+    const updatedLdeData = [...selectedSystem.ldeData];
+    if (result !== null) {
+      updatedLdeData[rowIndex].n = result.n.toFixed(6);
+      updatedLdeData[rowIndex].catalog = result.catalog;
+      // Auto-capitalize the material name to match the catalog
+      updatedLdeData[rowIndex].material = result.correctName;
+      console.log(`Calculated n=${result.n.toFixed(6)} for ${result.correctName} at ${wavelength}nm from ${result.catalog} catalog`);
+    } else {
+      // Clear n and catalog if glass not found
+      updatedLdeData[rowIndex].n = '';
+      updatedLdeData[rowIndex].catalog = '';
+      console.warn(`Glass "${materialValue}" not found in catalogs`);
+    }
+
+    setSelectedSystem({ ...selectedSystem, ldeData: updatedLdeData });
+    saveCurrentSystem();
+    pendingMaterialLookup.current[rowIndex] = false;
+  };
 
   const handleCellChange = (rowIndex, field, value) => {
     const newLdeData = [...ldeData];
@@ -29,24 +53,32 @@ export const LDETab = ({ selectedSystem, setSelectedSystem, saveCurrentSystem, c
         : value
     };
 
-    // If material field is changed, automatically calculate refractive index
-    if (field === 'material' && value) {
-      const wavelength = selectedSystem.wavelength || 550; // Default to 550nm if not set
-      const result = calculateRefractiveIndexWithCatalog(value, wavelength);
-      if (result !== null) {
-        newLdeData[rowIndex].n = result.n.toFixed(6);
-        newLdeData[rowIndex].catalog = result.catalog;
-        console.log(`Calculated n=${result.n.toFixed(6)} for ${value} at ${wavelength}nm from ${result.catalog} catalog`);
+    // If material field is changed, mark it as pending lookup but don't execute yet
+    if (field === 'material') {
+      if (value) {
+        // Mark that this row needs a material lookup when editing finishes
+        pendingMaterialLookup.current[rowIndex] = true;
       } else {
-        // Clear n and catalog if glass not found
+        // If material is cleared, immediately clear n and catalog
         newLdeData[rowIndex].n = '';
         newLdeData[rowIndex].catalog = '';
-        console.warn(`Glass "${value}" not found in catalogs`);
+        pendingMaterialLookup.current[rowIndex] = false;
       }
     }
 
+    // If n field is manually changed and there's already a catalog glass specified
+    if (field === 'n' && newLdeData[rowIndex].catalog && newLdeData[rowIndex].material) {
+      const currentMaterial = newLdeData[rowIndex].material;
+      // Only add prefix if it doesn't already have it
+      if (!currentMaterial.startsWith('edited_')) {
+        newLdeData[rowIndex].material = 'edited_' + currentMaterial;
+      }
+      // Clear the catalog since this is now a custom value
+      newLdeData[rowIndex].catalog = '';
+    }
+
+    // Update state but DON'T save yet - saving will happen on blur/Enter
     setSelectedSystem({ ...selectedSystem, ldeData: newLdeData });
-    saveCurrentSystem();
   };
 
   const handleStopChange = (rowIndex) => {
@@ -98,7 +130,7 @@ export const LDETab = ({ selectedSystem, setSelectedSystem, saveCurrentSystem, c
     setSelectedRows(new Set());
   };
 
-  const handleKeyDown = (e, rowIndex) => {
+  const handleKeyDown = (e, rowIndex, colName) => {
     if (e.key === 'Insert') {
       e.preventDefault();
       insertRow(rowIndex, false);
@@ -111,8 +143,32 @@ export const LDETab = ({ selectedSystem, setSelectedSystem, saveCurrentSystem, c
       }
     } else if (e.key === 'Enter') {
       e.preventDefault();
+      // If material was being edited and needs lookup, perform it now
+      if (colName === 'material' && pendingMaterialLookup.current[rowIndex]) {
+        const materialValue = ldeData[rowIndex].material;
+        if (materialValue) {
+          performMaterialLookup(rowIndex, materialValue);
+        }
+      } else {
+        // For all other columns, just save when done editing
+        saveCurrentSystem();
+      }
       setEditingCell(null);
     }
+  };
+
+  const handleCellBlur = (rowIndex, colName) => {
+    // If material was being edited and needs lookup, perform it now
+    if (colName === 'material' && pendingMaterialLookup.current[rowIndex]) {
+      const materialValue = ldeData[rowIndex].material;
+      if (materialValue) {
+        performMaterialLookup(rowIndex, materialValue);
+      }
+    } else {
+      // For all other columns, just save when done editing
+      saveCurrentSystem();
+    }
+    setEditingCell(null);
   };
 
   const handleContextMenu = (e, rowIndex) => {
@@ -202,7 +258,7 @@ export const LDETab = ({ selectedSystem, setSelectedSystem, saveCurrentSystem, c
   };
 
   const handleCellClick = (e, rowIndex, colName) => {
-    if (colName === 'catalog' || colName === 'n' || colName === 'stop') return; // Read-only columns
+    if (colName === 'catalog' || colName === 'stop') return; // Read-only columns
 
     e.stopPropagation();
     const cellKey = getCellKey(rowIndex, colName);
@@ -222,7 +278,7 @@ export const LDETab = ({ selectedSystem, setSelectedSystem, saveCurrentSystem, c
       const newSelection = new Set();
       for (let r = minRow; r <= maxRow; r++) {
         for (let c = minCol; c <= maxCol; c++) {
-          if (columns[c] !== 'catalog' && columns[c] !== 'n' && columns[c] !== 'stop') {
+          if (columns[c] !== 'catalog' && columns[c] !== 'stop') {
             newSelection.add(getCellKey(r, columns[c]));
           }
         }
@@ -252,7 +308,7 @@ export const LDETab = ({ selectedSystem, setSelectedSystem, saveCurrentSystem, c
   };
 
   const handleCellDoubleClick = (rowIndex, colName) => {
-    if (colName === 'catalog' || colName === 'n' || colName === 'stop') return;
+    if (colName === 'catalog' || colName === 'stop') return;
     setEditingCell({ row: rowIndex, col: colName });
     setTimeout(() => {
       const input = inputRefs.current[getCellKey(rowIndex, colName)];
@@ -264,14 +320,14 @@ export const LDETab = ({ selectedSystem, setSelectedSystem, saveCurrentSystem, c
   };
 
   const handleCellMouseDown = (e, rowIndex, colName) => {
-    if (colName === 'catalog' || colName === 'n' || colName === 'stop' || e.shiftKey || e.ctrlKey) return;
+    if (colName === 'catalog' || colName === 'stop' || e.shiftKey || e.ctrlKey) return;
     setIsDragging(true);
     setDragStart({ row: rowIndex, col: colName });
     handleCellClick(e, rowIndex, colName);
   };
 
   const handleCellMouseEnter = (e, rowIndex, colName) => {
-    if (!isDragging || !dragStart || colName === 'catalog' || colName === 'n' || colName === 'stop') return;
+    if (!isDragging || !dragStart || colName === 'catalog' || colName === 'stop') return;
 
     const startRow = dragStart.row;
     const endRow = rowIndex;
@@ -286,7 +342,7 @@ export const LDETab = ({ selectedSystem, setSelectedSystem, saveCurrentSystem, c
     const newSelection = new Set();
     for (let r = minRow; r <= maxRow; r++) {
       for (let c = minCol; c <= maxCol; c++) {
-        if (columns[c] !== 'catalog' && columns[c] !== 'n' && columns[c] !== 'stop') {
+        if (columns[c] !== 'catalog' && columns[c] !== 'stop') {
           newSelection.add(getCellKey(r, columns[c]));
         }
       }
@@ -480,7 +536,7 @@ export const LDETab = ({ selectedSystem, setSelectedSystem, saveCurrentSystem, c
                     )
                   );
                 }
-                if (colName === 'catalog' || colName === 'n') {
+                if (colName === 'catalog') {
                   return React.createElement('td',
                     {
                       key: colName,
@@ -522,8 +578,8 @@ export const LDETab = ({ selectedSystem, setSelectedSystem, saveCurrentSystem, c
                       type: colName === 'semiDiameter' || colName === 'diameter' ? 'number' : 'text',
                       value: getCellValue(row, colName),
                       onChange: (e) => handleCellChange(index, colName, e.target.value),
-                      onKeyDown: (e) => handleKeyDown(e, index),
-                      onBlur: () => setEditingCell(null),
+                      onKeyDown: (e) => handleKeyDown(e, index, colName),
+                      onBlur: () => handleCellBlur(index, colName),
                       readOnly: !isEditing,
                       step: colName === 'semiDiameter' || colName === 'diameter' ? '0.1' : undefined,
                       style: {

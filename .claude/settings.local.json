@@ -6,7 +6,14 @@
       "Bash(npm start)",
       "Bash(node -c:*)",
       "Bash(node test/testGlassCalculator.js:*)",
-      "Bash(node test/testCatalogColumn.js:*)"
+      "Bash(node test/testCatalogColumn.js:*)",
+      "Bash(timeout:*)",
+      "Bash(exit:*)",
+      "Bash(node -e:*)",
+      "Bash(node test/testK8.js:*)",
+      "Bash(powershell -Command \"Get-Content OPAL.AGF -Encoding Byte -TotalCount 10 | ForEach-Object { ''{0:X2}'' -f $_}\")",
+      "Bash(node test/testOPALEncoding.js:*)",
+      "Bash(del nul)"
     ]
   }
 }
