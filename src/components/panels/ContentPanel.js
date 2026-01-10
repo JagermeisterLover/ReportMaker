@@ -13,7 +13,8 @@ export const ContentPanel = ({
   activeLensTab,
   onLensTabChange,
   saveCurrentSystem,
-  colorScheme
+  colorScheme,
+  locale
 }) => {
   const c = colorScheme;
 
@@ -161,7 +162,9 @@ export const ContentPanel = ({
         });
       case 'Autocollimation Points':
         return React.createElement(AutocollimationTab, {
-          colorScheme: c
+          system: selectedSystem,
+          colorScheme: c,
+          locale
         });
       default:
         return null;

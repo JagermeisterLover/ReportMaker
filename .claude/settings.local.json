@@ -13,7 +13,8 @@
       "Bash(node test/testK8.js:*)",
       "Bash(powershell -Command \"Get-Content OPAL.AGF -Encoding Byte -TotalCount 10 | ForEach-Object { ''{0:X2}'' -f $_}\")",
       "Bash(node test/testOPALEncoding.js:*)",
-      "Bash(del nul)"
+      "Bash(del nul)",
+      "Bash(grep:*)"
     ]
   }
 }

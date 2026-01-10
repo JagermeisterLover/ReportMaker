@@ -1,0 +1,7 @@
+D:\Kalovaya_massa\reportmaker\publish\ReportMaker.pdb
+D:\Kalovaya_massa\reportmaker\publish\D3DCompiler_47_cor3.dll
+D:\Kalovaya_massa\reportmaker\publish\PenImc_cor3.dll
+D:\Kalovaya_massa\reportmaker\publish\PresentationNative_cor3.dll
+D:\Kalovaya_massa\reportmaker\publish\vcruntime140_cor3.dll
+D:\Kalovaya_massa\reportmaker\publish\wpfgfx_cor3.dll
+D:\Kalovaya_massa\reportmaker\publish\ReportMaker.exe

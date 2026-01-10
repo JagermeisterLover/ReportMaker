@@ -457,7 +457,8 @@ const ReportMaker = () => {
         activeLensTab,
         onLensTabChange: setActiveLensTab,
         saveCurrentSystem,
-        colorScheme: c
+        colorScheme: c,
+        locale
       })
     ),
 
