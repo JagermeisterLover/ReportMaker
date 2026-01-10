@@ -35,3 +35,7 @@ logs/
 # Temporary files
 *.tmp
 *.temp
+
+# Reference and legacy code
+reference code/
+reportmakerlegacy/
