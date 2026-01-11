@@ -1,0 +1,747 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Optical System Renderer Test</title>
+  <style>
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 20px;
+      background: #f5f5f5;
+    }
+    h1 {
+      color: #333;
+      border-bottom: 3px solid #4a90e2;
+      padding-bottom: 10px;
+    }
+    h2 {
+      color: #555;
+      margin-top: 30px;
+    }
+    .test-case {
+      background: white;
+      padding: 20px;
+      margin: 20px 0;
+      border-radius: 8px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    .description {
+      color: #666;
+      margin-bottom: 15px;
+      font-style: italic;
+    }
+    .controls {
+      margin: 20px 0;
+      padding: 15px;
+      background: #e8f4f8;
+      border-radius: 5px;
+    }
+    .controls label {
+      display: inline-block;
+      margin-right: 15px;
+      margin-bottom: 10px;
+    }
+    .controls input[type="color"],
+    .controls input[type="number"],
+    .controls input[type="checkbox"] {
+      margin-left: 5px;
+    }
+    .surface-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 15px 0;
+      font-size: 12px;
+    }
+    .surface-table th,
+    .surface-table td {
+      border: 1px solid #ddd;
+      padding: 8px;
+      text-align: center;
+    }
+    .surface-table th {
+      background: #4a90e2;
+      color: white;
+    }
+    .surface-table tr:nth-child(even) {
+      background: #f9f9f9;
+    }
+  </style>
+</head>
+<body>
+  <h1>Optical System Renderer Test</h1>
+  <p>Testing the OpticalSystemRenderer component with various lens configurations.</p>
+
+  <div class="controls">
+    <h3>Rendering Options</h3>
+    <label>
+      Stroke Color:
+      <input type="color" id="strokeColor" value="#1e3a8a">
+    </label>
+    <label>
+      Fill Color:
+      <input type="color" id="fillColor" value="#3b82f6">
+    </label>
+    <label>
+      Show Axis:
+      <input type="checkbox" id="showAxis" checked>
+    </label>
+    <label>
+      Show Surface Numbers:
+      <input type="checkbox" id="showSurfaceNumbers" checked>
+    </label>
+    <label>
+      Fill Lenses:
+      <input type="checkbox" id="fillLenses" checked>
+    </label>
+    <label>
+      Show Dimensions:
+      <input type="checkbox" id="showDimensions">
+    </label>
+    <button onclick="updateRendering()" style="padding: 8px 20px; background: #4a90e2; color: white; border: none; border-radius: 4px; cursor: pointer;">
+      Update Rendering
+    </button>
+  </div>
+
+  <div id="root"></div>
+
+  <script type="importmap">
+  {
+    "imports": {
+      "react": "https://esm.sh/react@18.2.0",
+      "react-dom/client": "https://esm.sh/react-dom@18.2.0/client"
+    }
+  }
+  </script>
+
+  <script type="module">
+    import React from 'react';
+    import ReactDOM from 'react-dom/client';
+
+    // OpticalSystemRenderer component (inline) - IMPROVED VERSION WITH DIMENSIONS
+    const OpticalSystemRenderer = ({ surfaces, options = {}, width = 800, height = 400 }) => {
+      // --- Default Options ---
+      const {
+        showAxis = true,
+        showSurfaceNumbers = true,
+        showDimensions = false,
+        fillLenses = true,
+        strokeColor = '#1e3a8a',
+        fillColor = '#dbeafe',
+        axisColor = '#94a3b8',
+        surfaceNumberColor = '#64748b'
+      } = options;
+
+      // --- Geometry Calculation Helpers ---
+      const calculateSag = (radius, y) => {
+        if (radius === 0 || !isFinite(radius)) return 0;
+        const rAbs = Math.abs(radius);
+        if (Math.abs(y) > rAbs) {
+          return radius > 0 ? rAbs : -rAbs;
+        }
+        const sign = Math.sign(radius);
+        // Protect against negative sqrt values due to floating point errors
+        const sqrtArg = rAbs * rAbs - y * y;
+        return sign * (rAbs - Math.sqrt(sqrtArg < 0 ? 0 : sqrtArg));
+      };
+
+      const generateArcPoints = (zVertex, radius, semiDiam, numPoints = 60) => {
+        const points = [];
+        for (let i = 0; i <= numPoints; i++) {
+          const t = i / numPoints;
+          const y = -semiDiam + t * (2 * semiDiam);
+          const sag = calculateSag(radius, y);
+          points.push({ x: zVertex + sag, y });
+        }
+        return points;
+      };
+
+      // --- Process Surfaces into Lens Elements ---
+      if (!surfaces || surfaces.length === 0) {
+        return React.createElement('div', {
+          style: { color: '#9ca3af', padding: '40px', textAlign: 'center' }
+        }, 'No optical surfaces defined.');
+      }
+
+      const elements = [];
+      let currentZ = 0;
+      let i = 0;
+      let maxDia = 0;
+
+      while (i < surfaces.length - 1) {
+        const s1 = surfaces[i];
+        const s2 = surfaces[i + 1];
+        const isGlass = s1.material &&
+                        s1.material.toUpperCase() !== 'AIR' &&
+                        s1.material.trim() !== '' &&
+                        s1.material.toUpperCase() !== 'MIRROR';
+
+        if (isGlass) {
+          elements.push({
+            id: `lens-${i}`,
+            type: 'lens',
+            zFront: currentZ,
+            zBack: currentZ + parseFloat(s1.thickness || 0),
+            frontSurface: s1,
+            backSurface: s2,
+            surfaceIndex: i + 1
+          });
+          maxDia = Math.max(maxDia, s1.diameter || 0, s2.diameter || 0);
+          currentZ += parseFloat(s1.thickness || 0);
+          i++;
+        } else {
+          currentZ += parseFloat(s1.thickness || 0);
+          maxDia = Math.max(maxDia, s1.diameter || 0);
+          i++;
+        }
+      }
+
+      // --- Calculate ViewBox Bounds ---
+      let maxH = maxDia / 2;
+      let maxZ = currentZ;
+
+      // Recalculate strict bounding box including sag
+      elements.forEach(el => {
+        const h1 = parseFloat(el.frontSurface.diameter || 0) / 2;
+        const sag1 = calculateSag(parseFloat(el.frontSurface.radius || 0), h1);
+        const h2 = parseFloat(el.backSurface.diameter || 0) / 2;
+        const sag2 = calculateSag(parseFloat(el.backSurface.radius || 0), h2);
+        maxZ = Math.max(maxZ, el.zFront + sag1, el.zBack + sag2);
+      });
+
+      const fontSizeBase = Math.max(3, maxH / 10);
+      const dimensionFontSize = fontSizeBase * 0.6; // Smaller font for dimensions
+      const dimSpacing = fontSizeBase * 2.5;
+      const dimensionMarginY = showDimensions ? maxH + dimSpacing * 4 : 0;
+
+      const marginX = maxZ * 0.2 + 20;
+      const marginY = maxH * 0.2 + 10 + dimensionMarginY;
+      const vMinX = -marginX;
+      const vMinY = -(maxH + marginY);
+      const vWidth = maxZ + marginX * 2;
+      const vHeight = (maxH + marginY) * 2;
+      const viewBox = `${vMinX} ${vMinY} ${vWidth} ${vHeight}`;
+
+      // --- Dimension Drawing Helper ---
+      const DrawDimension = ({ x1, y1, x2, y2, yLevel, label }) => {
+        const textY = yLevel - (dimensionFontSize * 0.4);
+
+        return React.createElement(
+          'g',
+          { className: 'dimension-group' },
+          [
+            React.createElement('line', {
+              key: 'ext1',
+              x1, y1,
+              x2: x1,
+              y2: yLevel,
+              stroke: '#000000',
+              strokeWidth: '0.5',
+              opacity: 1,
+              vectorEffect: 'non-scaling-stroke'
+            }),
+            React.createElement('line', {
+              key: 'ext2',
+              x1: x2,
+              y1: y2,
+              x2, y2: yLevel,
+              stroke: '#000000',
+              strokeWidth: '0.5',
+              opacity: 1,
+              vectorEffect: 'non-scaling-stroke'
+            }),
+            React.createElement('line', {
+              key: 'dim-line',
+              x1, y1: yLevel,
+              x2, y2: yLevel,
+              stroke: '#000000',
+              strokeWidth: '0.8',
+              markerEnd: 'url(#arrowhead)',
+              markerStart: 'url(#arrowhead-rev)',
+              vectorEffect: 'non-scaling-stroke'
+            }),
+            React.createElement('text', {
+              key: 'label',
+              x: (x1 + x2) / 2,
+              y: textY,
+              fill: '#000000',
+              fontSize: dimensionFontSize,
+              textAnchor: 'middle',
+              fontWeight: '600',
+              style: { userSelect: 'none', pointerEvents: 'none', textShadow: '0px 0px 4px white' }
+            }, label)
+          ]
+        );
+      };
+
+      // --- Rendering Helper ---
+      const renderLens = (element, index) => {
+        const { id, zFront, zBack, frontSurface, backSurface, surfaceIndex } = element;
+        const hFront = parseFloat(frontSurface.diameter || frontSurface.semiDiameter * 2 || 0) / 2;
+        const hBack = parseFloat(backSurface.diameter || backSurface.semiDiameter * 2 || 0) / 2;
+        const rFront = parseFloat(frontSurface.radius || 0);
+        const rBack = parseFloat(backSurface.radius || 0);
+
+        // Determine the mechanical outer radius (max of apertures)
+        const hMax = Math.max(hFront, hBack);
+
+        // Generate arc points from Bottom (-h) to Top (+h)
+        const frontPoints = generateArcPoints(zFront, rFront, hFront, 60);
+        const backPoints = generateArcPoints(zBack, rBack, hBack, 60);
+
+        // --- Path Construction (Counter-Clockwise) ---
+        // 1. Start at Front Top
+        const pFrontTop = frontPoints[frontPoints.length - 1];
+        let d = `M ${pFrontTop.x} ${pFrontTop.y}`;
+
+        // 2. Top Edge Connection (Front Top -> Back Top)
+        if (hFront < hMax) {
+          d += ` L ${pFrontTop.x} ${hMax}`;
+        }
+        const pBackTop = backPoints[backPoints.length - 1];
+        d += ` L ${pBackTop.x} ${hMax}`;
+        if (hBack < hMax) {
+          d += ` L ${pBackTop.x} ${hBack}`;
+        }
+
+        // 3. Back Surface (Top -> Bottom)
+        for (let i = backPoints.length - 2; i >= 0; i--) {
+          d += ` L ${backPoints[i].x} ${backPoints[i].y}`;
+        }
+        const pBackBottom = backPoints[0];
+
+        // 4. Bottom Edge Connection (Back Bottom -> Front Bottom)
+        if (hBack < hMax) {
+          d += ` L ${pBackBottom.x} ${-hMax}`;
+        }
+        const pFrontBottom = frontPoints[0];
+        d += ` L ${pFrontBottom.x} ${-hMax}`;
+        if (hFront < hMax) {
+          d += ` L ${pFrontBottom.x} ${-hFront}`;
+        }
+
+        // 5. Front Surface (Bottom -> Top)
+        for (let i = 1; i < frontPoints.length; i++) {
+          d += ` L ${frontPoints[i].x} ${frontPoints[i].y}`;
+        }
+        d += ` Z`;
+
+        // Calculate dimension points
+        const zFrontEdge = zFront + calculateSag(rFront, hFront);
+        const zBackEdge = zBack + calculateSag(rBack, hBack);
+        const lensMinZ = Math.min(zFront, zBack, zFrontEdge, zBackEdge);
+        const lensMaxZ = Math.max(zFront, zBack, zFrontEdge, zBackEdge);
+        const boxLength = lensMaxZ - lensMinZ;
+        const ct = Math.abs(zBack - zFront);
+        const et = Math.abs(zBackEdge - zFrontEdge);
+        const isMeniscusBigBox = boxLength > ct * 1.05 && boxLength > et * 1.05;
+
+        const stagger = index % 2 === 0 ? 0 : dimSpacing * 1.2;
+        const ctLevel = (maxH + dimSpacing) + stagger;
+        const etLevel = -(maxH + dimSpacing) - stagger;
+        const oalLevel = -(maxH + dimSpacing * 2.2) - stagger;
+
+        const getLeftAnchor = () => {
+          if (zFront <= zFrontEdge) return { x: zFront, y: 0 };
+          return { x: zFrontEdge, y: -hFront };
+        };
+        const getRightAnchor = () => {
+          if (zBack >= zBackEdge) return { x: zBack, y: 0 };
+          return { x: zBackEdge, y: -hBack };
+        };
+
+        const leftAnchor = getLeftAnchor();
+        const rightAnchor = getRightAnchor();
+
+        const childElements = [];
+
+        // Glass body with gradient
+        childElements.push(
+          React.createElement('path', {
+            key: 'glass-body',
+            d: d,
+            fill: fillLenses ? 'url(#lensGradient)' : 'none',
+            fillOpacity: fillLenses ? 0.9 : 0,
+            stroke: strokeColor,
+            strokeWidth: '0.5',
+            vectorEffect: 'non-scaling-stroke'
+          })
+        );
+
+        // Surface labels
+        if (showSurfaceNumbers) {
+          const labelFontSize = dimensionFontSize;
+          childElements.push(
+            React.createElement('text', {
+              key: 'front-label',
+              x: zFront,
+              y: -2,
+              fontSize: labelFontSize,
+              fill: surfaceNumberColor,
+              textAnchor: 'end',
+              style: { userSelect: 'none', pointerEvents: 'none', fontWeight: 'bold', opacity: 0.8 }
+            }, `S${surfaceIndex}`)
+          );
+          childElements.push(
+            React.createElement('text', {
+              key: 'back-label',
+              x: zBack,
+              y: -2,
+              fontSize: labelFontSize,
+              fill: surfaceNumberColor,
+              textAnchor: 'start',
+              style: { userSelect: 'none', pointerEvents: 'none', fontWeight: 'bold', opacity: 0.8 }
+            }, `S${surfaceIndex + 1}`)
+          );
+          childElements.push(
+            React.createElement('circle', {
+              key: 'front-dot',
+              cx: zFront,
+              cy: 0,
+              r: maxH / 150,
+              fill: 'black'
+            })
+          );
+          childElements.push(
+            React.createElement('circle', {
+              key: 'back-dot',
+              cx: zBack,
+              cy: 0,
+              r: maxH / 150,
+              fill: 'black'
+            })
+          );
+        }
+
+        // Dimensions
+        if (showDimensions) {
+          childElements.push(
+            React.createElement(DrawDimension, {
+              key: 'ct-dim',
+              x1: zFront,
+              y1: 0,
+              x2: zBack,
+              y2: 0,
+              yLevel: ctLevel,
+              label: `CT ${ct.toFixed(2)}`
+            })
+          );
+          childElements.push(
+            React.createElement(DrawDimension, {
+              key: 'et-dim',
+              x1: zFrontEdge,
+              y1: -hFront,
+              x2: zBackEdge,
+              y2: -hBack,
+              yLevel: etLevel,
+              label: `ET ${et.toFixed(2)}`
+            })
+          );
+          if (isMeniscusBigBox) {
+            childElements.push(
+              React.createElement(DrawDimension, {
+                key: 'oal-dim',
+                x1: leftAnchor.x,
+                y1: leftAnchor.y,
+                x2: rightAnchor.x,
+                y2: rightAnchor.y,
+                yLevel: oalLevel,
+                label: `OAL ${boxLength.toFixed(2)}`
+              })
+            );
+          }
+        }
+
+        return React.createElement(
+          'g',
+          { key: id, style: { transition: 'opacity 0.3s' } },
+          childElements
+        );
+      };
+
+      // --- Main SVG Render ---
+      const svgElements = [];
+
+      // SVG Definitions (gradient and arrow markers)
+      const defsChildren = [];
+
+      // Glass Gradient
+      defsChildren.push(
+        React.createElement('linearGradient', {
+          key: 'lensGradient',
+          id: 'lensGradient',
+          x1: '0%',
+          y1: '0%',
+          x2: '100%',
+          y2: '100%'
+        }, [
+          React.createElement('stop', {
+            key: 'stop1',
+            offset: '0%',
+            stopColor: '#dbeafe',
+            stopOpacity: '0.8'
+          }),
+          React.createElement('stop', {
+            key: 'stop2',
+            offset: '50%',
+            stopColor: '#eff6ff',
+            stopOpacity: '0.4'
+          }),
+          React.createElement('stop', {
+            key: 'stop3',
+            offset: '100%',
+            stopColor: '#bfdbfe',
+            stopOpacity: '0.9'
+          })
+        ])
+      );
+
+      // Arrow markers - Smaller solid black arrows
+      defsChildren.push(
+        React.createElement('marker', {
+          key: 'arrowhead',
+          id: 'arrowhead',
+          markerWidth: 6,
+          markerHeight: 4,
+          refX: 5,
+          refY: 2,
+          orient: 'auto'
+        }, React.createElement('polygon', {
+          points: '0 0, 6 2, 0 4',
+          fill: '#000000'
+        }))
+      );
+      defsChildren.push(
+        React.createElement('marker', {
+          key: 'arrowhead-rev',
+          id: 'arrowhead-rev',
+          markerWidth: 6,
+          markerHeight: 4,
+          refX: 1,
+          refY: 2,
+          orient: 'auto'
+        }, React.createElement('polygon', {
+          points: '6 0, 0 2, 6 4',
+          fill: '#000000'
+        }))
+      );
+      svgElements.push(
+        React.createElement('defs', { key: 'defs' }, defsChildren)
+      );
+
+      if (showAxis) {
+        svgElements.push(
+          React.createElement('line', {
+            key: 'optical-axis',
+            x1: vMinX,
+            y1: 0,
+            x2: vMinX + vWidth,
+            y2: 0,
+            stroke: axisColor,
+            strokeWidth: '0.5',
+            strokeDasharray: '10,5',
+            vectorEffect: 'non-scaling-stroke'
+          })
+        );
+      }
+
+      elements.forEach((el, idx) => {
+        svgElements.push(renderLens(el, idx));
+      });
+
+      // System Total Track Length (TTL)
+      if (showDimensions && elements.length > 0) {
+        const systemStart = elements[0].zFront;
+        const systemEnd = elements[elements.length - 1].zBack;
+        const totalTrack = Math.abs(systemEnd - systemStart);
+        const ttlLevel = maxH + dimSpacing * 4;
+
+        svgElements.push(
+          React.createElement(DrawDimension, {
+            key: 'ttl-dim',
+            x1: systemStart,
+            y1: 0,
+            x2: systemEnd,
+            y2: 0,
+            yLevel: ttlLevel,
+            label: `TTL ${totalTrack.toFixed(2)}`
+          })
+        );
+      }
+
+      return React.createElement(
+        'div',
+        {
+          style: {
+            width: '100%',
+            height: '100%',
+            background: 'white',
+            borderRadius: '8px',
+            overflow: 'hidden',
+            boxShadow: 'inset 0 2px 4px 0 rgba(0, 0, 0, 0.06)',
+            border: '1px solid #e2e8f0'
+          }
+        },
+        React.createElement(
+          'svg',
+          {
+            width: '100%',
+            height: '100%',
+            viewBox: viewBox,
+            preserveAspectRatio: 'xMidYMid meet',
+            style: { display: 'block' }
+          },
+          svgElements
+        )
+      );
+    };
+
+    // Test cases
+    const testCases = [
+      {
+        name: 'Simple Bi-Convex Lens',
+        description: 'Classic bi-convex lens with equal radii',
+        surfaces: [
+          { radius: 50, thickness: 10, material: 'N-BK7', diameter: 40 },
+          { radius: -50, thickness: 100, material: '', diameter: 40 }
+        ]
+      },
+      {
+        name: 'Plano-Convex Lens',
+        description: 'Flat front surface, curved back surface',
+        surfaces: [
+          { radius: 0, thickness: 8, material: 'N-BK7', diameter: 30 },
+          { radius: -40, thickness: 50, material: '', diameter: 30 }
+        ]
+      },
+      {
+        name: 'Meniscus Lens',
+        description: 'Both surfaces curved in the same direction',
+        surfaces: [
+          { radius: 60, thickness: 5, material: 'N-SF11', diameter: 35 },
+          { radius: 45, thickness: 80, material: '', diameter: 35 }
+        ]
+      },
+      {
+        name: 'Two-Lens System',
+        description: 'Two separated lenses with different diameters',
+        surfaces: [
+          { radius: 40, thickness: 8, material: 'N-BK7', diameter: 30 },
+          { radius: -40, thickness: 20, material: '', diameter: 30 },
+          { radius: 35, thickness: 12, material: 'N-SF5', diameter: 40 },
+          { radius: -60, thickness: 100, material: '', diameter: 40 }
+        ]
+      },
+      {
+        name: 'Cemented Doublet',
+        description: 'Two lenses with different materials cemented together',
+        surfaces: [
+          { radius: 45, thickness: 8, material: 'N-BK7', diameter: 35 },
+          { radius: -30, thickness: 4, material: 'N-SF5', diameter: 35 },
+          { radius: -80, thickness: 100, material: '', diameter: 35 }
+        ]
+      },
+      {
+        name: 'Different Diameter Surfaces',
+        description: 'Lens with different diameters on front and back',
+        surfaces: [
+          { radius: 50, thickness: 10, material: 'N-BK7', diameter: 30 },
+          { radius: -50, thickness: 80, material: '', diameter: 45 }
+        ]
+      },
+      {
+        name: 'Complex Multi-Element System',
+        description: 'Three lenses with varying properties',
+        surfaces: [
+          { radius: 60, thickness: 6, material: 'N-BK7', diameter: 40 },
+          { radius: -80, thickness: 15, material: '', diameter: 40 },
+          { radius: 35, thickness: 8, material: 'N-SF11', diameter: 38 },
+          { radius: -35, thickness: 2, material: 'N-BK7', diameter: 38 },
+          { radius: -70, thickness: 25, material: '', diameter: 35 },
+          { radius: 100, thickness: 10, material: 'N-LAK21', diameter: 42 },
+          { radius: -55, thickness: 120, material: '', diameter: 42 }
+        ]
+      }
+    ];
+
+    let currentOptions = {
+      showAxis: true,
+      showSurfaceNumbers: true,
+      showDimensions: false,
+      fillLenses: true,
+      strokeColor: '#1e3a8a',
+      fillColor: '#dbeafe'
+    };
+
+    function renderApp() {
+      const root = ReactDOM.createRoot(document.getElementById('root'));
+
+      root.render(
+        React.createElement('div', null,
+          testCases.map((testCase, idx) =>
+            React.createElement('div', { key: idx, className: 'test-case' }, [
+              React.createElement('h2', { key: 'title' }, testCase.name),
+              React.createElement('p', { key: 'desc', className: 'description' }, testCase.description),
+              React.createElement('table', { key: 'table', className: 'surface-table' }, [
+                React.createElement('thead', { key: 'thead' },
+                  React.createElement('tr', null, [
+                    React.createElement('th', { key: 'surf' }, 'Surface'),
+                    React.createElement('th', { key: 'rad' }, 'Radius'),
+                    React.createElement('th', { key: 'thick' }, 'Thickness'),
+                    React.createElement('th', { key: 'mat' }, 'Material'),
+                    React.createElement('th', { key: 'diam' }, 'Diameter')
+                  ])
+                ),
+                React.createElement('tbody', { key: 'tbody' },
+                  testCase.surfaces.map((surf, sidx) =>
+                    React.createElement('tr', { key: sidx }, [
+                      React.createElement('td', { key: 'surf' }, sidx),
+                      React.createElement('td', { key: 'rad' }, surf.radius),
+                      React.createElement('td', { key: 'thick' }, surf.thickness),
+                      React.createElement('td', { key: 'mat' }, surf.material || '-'),
+                      React.createElement('td', { key: 'diam' }, surf.diameter)
+                    ])
+                  )
+                )
+              ]),
+              React.createElement(OpticalSystemRenderer, {
+                key: 'renderer',
+                surfaces: testCase.surfaces,
+                options: currentOptions,
+                width: 800,
+                height: 400
+              })
+            ])
+          )
+        )
+      );
+    }
+
+    // Initial render
+    renderApp();
+
+    // Make updateRendering available globally
+    window.updateRendering = function() {
+      const strokeColor = document.getElementById('strokeColor').value;
+      const fillColor = document.getElementById('fillColor').value;
+      const showAxis = document.getElementById('showAxis').checked;
+      const showNumbers = document.getElementById('showSurfaceNumbers').checked;
+      const fillLenses = document.getElementById('fillLenses').checked;
+      const showDimensions = document.getElementById('showDimensions').checked;
+
+      currentOptions = {
+        showAxis: showAxis,
+        showSurfaceNumbers: showNumbers,
+        showDimensions: showDimensions,
+        fillLenses: fillLenses,
+        strokeColor: strokeColor,
+        fillColor: fillColor
+      };
+
+      renderApp();
+    };
+  </script>
+</body>
+</html>

@@ -1,3 +1,9 @@
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+---
+
 # ReportMaker - Technical Documentation
 
 ## Overview
@@ -90,7 +96,8 @@ ReportMaker is a desktop application for optical system analysis and report gene
    - Automatic generation based on lens extraction
 
 4. **Autocollimation Points Tab**
-   - Placeholder for future autocollimation data
+   - Autocollimation point data entry and management
+   - Autocollimation calculations via [src/utils/autocollimationCalculator.js](src/utils/autocollimationCalculator.js)
 
 ##### File Operations
 - **Import Zemax files** via file picker
@@ -116,9 +123,9 @@ ReportMaker is a desktop application for optical system analysis and report gene
 #### Technology Stack
 - **Runtime**: Electron 39.2.3
 - **Frontend**: React 18.2.0 (vanilla, no JSX)
-- **Visualization**: Plotly.js (CDN)
 - **Build**: electron-builder
 - **Styling**: Inline CSS-in-JS with theme system
+- **Module System**: ES6 modules (native browser import/export)
 
 #### Code Organization
 ```
@@ -128,6 +135,10 @@ src/
 ├── renderer.js                      # React app entry point
 ├── index.html                       # HTML shell
 ├── styles.css                       # Global styles
+├── GlassCat/                        # Glass catalog files (AGF format)
+│   ├── SCHOTT.AGF                   # SCHOTT catalog
+│   ├── CDGM.AGF                     # CDGM catalog
+│   └── OPAL.AGF                     # OPAL catalog
 ├── components/
 │   ├── TitleBar.js                  # Window controls
 │   ├── MenuBar.js                   # Custom menu bar
@@ -139,7 +150,7 @@ src/
 │   │   ├── OpticalSystemTab.js     # System metadata
 │   │   ├── LDETab.js               # Spreadsheet editor
 │   │   ├── LensesTab.js            # Lens-specific views
-│   │   └── AutocollimationTab.js   # Placeholder
+│   │   └── AutocollimationTab.js   # Autocollimation data
 │   ├── dialogs/
 │   │   ├── SettingsModal.js        # Settings dialog
 │   │   ├── InputDialog.js          # Generic input
@@ -153,12 +164,19 @@ src/
 │   ├── glassCatalogLoader.js       # AGF catalog loader
 │   ├── lensExtractor.js            # Lens identification
 │   ├── formatters.js               # Value formatting
-│   └── reportGenerator.js          # HTML/PDF export
+│   ├── focalLengthCalculator.js    # Focal length calculations
+│   └── autocollimationCalculator.js # Autocollimation calculations
 └── constants/
     ├── colorPalettes.js            # Theme definitions
-    ├── colorscales.js              # Plotly color scales
-    └── locales.js                  # Translations
+    └── locales.js                  # Translations (English, Russian)
 ```
+
+**Important architectural notes:**
+- All JavaScript files use ES6 modules (import/export)
+- React is used WITHOUT JSX - all components use `React.createElement()`
+- No build step required for development (uses native ES6 modules)
+- Components receive `colorScheme` and translations (`t`) as props
+- IPC communication uses contextBridge for security (no direct Node.js access in renderer)
 
 #### Data Flow
 1. **Main process** (main.js)
@@ -183,6 +201,41 @@ src/
 - **Auto-save** on every modification
 - **Lazy loading** of glass catalogs
 - **Ref-based optimization** for preventing duplicate calculations
+
+#### Key Implementation Patterns
+
+1. **No JSX Build Step**: All React components use `React.createElement()` directly
+   ```javascript
+   // Instead of <div>Hello</div>
+   React.createElement('div', null, 'Hello')
+   ```
+
+2. **State Updates with Auto-save**: System modifications trigger immediate save to disk
+   ```javascript
+   const updateSystem = (updatedSystem) => {
+     setSelectedSystem(updatedSystem);
+     // Auto-save happens via useEffect watching selectedSystem
+   };
+   ```
+
+3. **Material Lookup Pattern**: When user types a material name in LDE:
+   - Lookup refractive index from loaded catalogs
+   - Auto-populate `n` and `catalog` fields
+   - Handled in [src/utils/glassCalculator.js](src/utils/glassCalculator.js)
+
+4. **Lens Extraction**: Automatic lens identification from LDE surface data
+   - Finds material boundaries (first and second surface of each lens)
+   - Handles cemented doublets (consecutive material surfaces)
+   - Implemented in [src/utils/lensExtractor.js](src/utils/lensExtractor.js)
+
+5. **IPC Communication Pattern**:
+   ```javascript
+   // Renderer -> Main (async)
+   const result = await window.electronAPI.someOperation(data);
+
+   // Main -> Renderer (event)
+   mainWindow.webContents.send('event-name', data);
+   ```
 
 ### Data Models
 
@@ -273,8 +326,6 @@ Settings stored at:
 | Delete | Delete Item |
 | F2 | Rename Item |
 | F5 | Refresh |
-| Ctrl+E | Export HTML Report |
-| Ctrl+P | Export PDF Report |
 | Ctrl+, | Settings |
 | Ctrl+Shift+I | Toggle DevTools |
 
@@ -318,11 +369,15 @@ C:\Users\<username>\AppData\Roaming\report-maker\
 ### Glass Catalog Implementation
 
 #### Supported Catalogs
-- SCHOTT (German manufacturer)
-- OHARA (Japanese manufacturer)
-- CDGM (China manufacturer)
-- HOYA (Japanese manufacturer)
-- SUMITA (Japanese manufacturer)
+Glass catalog files are located in `src/GlassCat/` directory as AGF files:
+- **SCHOTT** (German manufacturer) - SCHOTT.AGF
+- **CDGM** (China manufacturer) - CDGM.AGF
+- **OPAL** (Russian manufacturer) - OPAL.AGF
+
+To add a new catalog:
+1. Place the `.AGF` file in `src/GlassCat/` directory
+2. Add catalog name to `AVAILABLE_CATALOGS` array in [src/utils/glassCatalogLoader.js](src/utils/glassCatalogLoader.js)
+3. Catalogs are loaded automatically on application startup via fetch API
 
 #### Dispersion Formula (Sellmeier - Formula 1)
 ```
@@ -361,26 +416,21 @@ The README.md was written when the project was just a wireframe. Since then, the
 #### Removed/Changed
 - "Summary" tab removed (not needed)
 - Tab structure changed: "Optical System", "LDE", "Lenses", "Autocollimation Points"
-- Report generation (still placeholder, needs content implementation)
+- Report generation functionality (to be implemented)
 
 ## Future Development
 
 ### High Priority
-1. **Autocollimation Points Tab**
-   - Data entry interface
-   - Point visualization
-   - Table display
+1. **Report Generation**
+   - Implement HTML/PDF export functionality
+   - Add lens diagrams and ray trace visualizations
+   - Summary statistics tables
+   - Choose and integrate visualization library if needed
 
-2. **Report Generation**
-   - Populate HTML/PDF templates with actual data
-   - Lens diagrams and visualizations
-   - Summary statistics
-
-3. **Optical Calculations**
-   - EFL (Effective Focal Length)
-   - BFL (Back Focal Length)
-   - Principal planes
+2. **Advanced Optical Calculations**
    - Aberration analysis
+   - Spot diagram calculations
+   - MTF (Modulation Transfer Function)
 
 ### Medium Priority
 4. **Visualization**
@@ -472,18 +522,25 @@ The README.md was written when the project was just a wireframe. Since then, the
 
 ## Building & Distribution
 
-### Development
-```bash
-npm install
-npm run dev
-```
+### Development Commands
 
-### Production Build
 ```bash
+# Install dependencies
+npm install
+
+# Run in development mode (with DevTools enabled)
+npm run dev
+
+# Run in production mode (without DevTools)
+npm start
+
+# Build distributable packages (Windows NSIS installer)
 npm run build
 ```
 
-Output directory: `dist/`
+### Build Outputs
+- Development: No build output (runs directly from source)
+- Production build: `dist/` directory contains installer
 
 ### Build Configuration
 - **App ID**: com.reportmaker.app
@@ -503,19 +560,27 @@ Output directory: `dist/`
 - electron-builder: ^24.9.1
 - cross-env: ^7.0.3
 
-### External Libraries (CDN)
-- Plotly.js (loaded via CDN in index.html)
+### Optical Calculation Utilities
+- **Focal Length Calculator** ([src/utils/focalLengthCalculator.js](src/utils/focalLengthCalculator.js))
+  - Paraxial focal length calculations
+  - EFL (Effective Focal Length) computation
+  - BFL (Back Focal Length) computation
+  - Principal plane calculations
+
+- **Autocollimation Calculator** ([src/utils/autocollimationCalculator.js](src/utils/autocollimationCalculator.js))
+  - Autocollimation point analysis
+  - Surface position calculations
 
 ## Known Issues & Limitations
 
 ### Current Limitations
 1. Only Sellmeier formula (Formula 1) implemented for glass catalogs
-2. Report generation templates not populated with data
+2. Report generation not yet implemented
 3. No undo/redo functionality
 4. Limited error messages for invalid data
 5. No batch import of multiple files
-6. No optical calculations yet (EFL, BFL, etc.)
-7. No ray tracing visualization
+6. No ray tracing visualization
+7. Optical calculations implemented but may need additional features (aberrations, MTF, etc.)
 
 ### Browser/Platform Quirks
 - Windows: File paths use backslashes

@@ -14,7 +14,17 @@
       "Bash(powershell -Command \"Get-Content OPAL.AGF -Encoding Byte -TotalCount 10 | ForEach-Object { ''{0:X2}'' -f $_}\")",
       "Bash(node test/testOPALEncoding.js:*)",
       "Bash(del nul)",
-      "Bash(grep:*)"
+      "Bash(grep:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git push:*)",
+      "Bash(start test-renderer.html)",
+      "Bash(start test-simple.html)",
+      "Bash(start test-with-table.html)",
+      "Bash(start debug-test.html)",
+      "Bash(start test-standalone.html)",
+      "Bash(del /F \"d:\\\\Kalovaya_massa\\\\ReportMaker-1\\\\src\\\\utils\\\\opticalSystemRenderer.js\")",
+      "Bash(ping:*)"
     ]
   }
 }

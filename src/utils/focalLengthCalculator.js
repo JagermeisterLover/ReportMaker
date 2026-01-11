@@ -56,8 +56,10 @@ function computeABCDMatrix(surfaces, n0 = 1.0, includeLastThickness = false) {
     }
 
     // Calculate optical power: P = (n' - n) / R
+    // Flat surfaces: R = 0 or R = Infinity => P = 0
     let P = 0;
-    if (R !== 0 && !isNaN(R) && isFinite(R)) {
+    const isFlat = (R === 0 || !isFinite(R) || isNaN(R));
+    if (!isFlat) {
       P = (n_next - n_prev) / R;
     }
 
@@ -83,22 +85,42 @@ function computeABCDMatrix(surfaces, n0 = 1.0, includeLastThickness = false) {
 
 /**
  * Remove image plane surfaces from the end of the surface list
- * Image plane surfaces are flat (infinite radius) surfaces with no power, typically at the end
+ * Image plane surfaces are flat (infinite radius or zero radius) surfaces with no power, typically at the end
+ * This should only remove true image plane markers, not actual optical surfaces like flat lens exits
  * @param {Array} surfaces - Array of surface objects
  * @returns {Array} Filtered surface array without trailing image planes
  */
 function removeImagePlaneSurfaces(surfaces) {
   let filtered = [...surfaces];
 
-  // Remove trailing surfaces that are flat (R = Infinity) and in air (n = 1.0)
+  // Remove trailing surfaces that are flat (R = Infinity or R = 0), in air (n = 1.0),
+  // AND have no material (indicating they're image plane markers, not actual optical surfaces)
   while (filtered.length > 0) {
     const lastSurface = filtered[filtered.length - 1];
     const R = parseFloat(lastSurface.radius);
+    const material = lastSurface.material || '';
     const nStr = lastSurface.n || '';
     const n = (nStr && nStr !== '' && nStr !== '0') ? parseFloat(nStr) : 1.0;
 
-    // If last surface is flat (infinite radius) and in air, it's likely an image plane
-    if (!isFinite(R) && Math.abs(n - 1.0) < 0.001) {
+    // Check if this surface causes a refractive index change
+    // If the previous surface had material and this one doesn't, it's an exit surface (keep it)
+    // If both surfaces are in air with no material, and this one is flat, it's likely an image plane
+    let isExitSurface = false;
+    if (filtered.length >= 2) {
+      const prevSurface = filtered[filtered.length - 2];
+      const prevNStr = prevSurface.n || '';
+      const prevN = (prevNStr && prevNStr !== '' && prevNStr !== '0') ? parseFloat(prevNStr) : 1.0;
+
+      // If previous surface had glass (n > 1) and this surface is in air (n ≈ 1), it's an exit surface
+      isExitSurface = (prevN > 1.1 && Math.abs(n - 1.0) < 0.001);
+    }
+
+    // Only remove if: flat surface, in air, no material, and NOT an exit surface
+    const isFlat = (R === 0 || !isFinite(R) || isNaN(R));
+    const isInAir = Math.abs(n - 1.0) < 0.001;
+    const hasNoMaterial = !material || material.trim() === '';
+
+    if (isFlat && isInAir && hasNoMaterial && !isExitSurface) {
       console.log(`Removing image plane surface at index ${filtered.length - 1}`);
       filtered.pop();
     } else {

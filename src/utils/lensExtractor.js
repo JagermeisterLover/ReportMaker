@@ -69,10 +69,21 @@ export function createLensJSON(lens, systemName, wavelength) {
     systemName,
     lensNumber: lens.lensNumber,
     wavelength,
-    ldeData: lens.surfaces.map((surface, index) => ({
-      ...surface,
-      surface: index // Renumber surfaces to 0 and 1
-    }))
+    ldeData: lens.surfaces.map((surface, index) => {
+      const surfaceData = {
+        ...surface,
+        surface: index // Renumber surfaces to 0 and 1
+      };
+
+      // Strip material from second surface (exit surface) to avoid cemented doublet issues
+      if (index === 1) {
+        surfaceData.material = '';
+        surfaceData.catalog = '';
+        surfaceData.n = '';
+      }
+
+      return surfaceData;
+    })
   };
 }
 

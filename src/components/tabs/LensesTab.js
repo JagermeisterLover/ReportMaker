@@ -1,6 +1,8 @@
 // LensesTab.js - Lenses tab content with LDE table for individual lenses
 
 import { calculateFocalLengths, formatFocalLength } from '../../utils/focalLengthCalculator.js';
+import { calculateAutocollimationPoints, formatAutocollimationDistance, formatAngularMagnification } from '../../utils/autocollimationCalculator.js';
+import { OpticalSystemRenderer } from '../../utils/opticalSystemRenderer.js';
 
 export const LensesTab = ({ selectedSystem, activeLensTab, colorScheme }) => {
   const c = colorScheme;
@@ -27,10 +29,31 @@ export const LensesTab = ({ selectedSystem, activeLensTab, colorScheme }) => {
     );
   }
 
+  // Strip material from second surface for rendering (cemented doublet fix)
+  const cleanedLdeData = React.useMemo(() => {
+    return lensData.ldeData.map((surface, index) => {
+      if (index === 1) {
+        // Second surface - strip material properties
+        return {
+          ...surface,
+          material: '',
+          catalog: '',
+          n: ''
+        };
+      }
+      return surface;
+    });
+  }, [lensData.ldeData]);
+
   // Calculate focal lengths for this lens
   const focalLengths = React.useMemo(() => {
     return calculateFocalLengths(lensData.ldeData, lensData.wavelength || 550);
   }, [lensData.ldeData, lensData.wavelength]);
+
+  // Calculate autocollimation points for this lens
+  const autocollimationPoints = React.useMemo(() => {
+    return calculateAutocollimationPoints(lensData.ldeData);
+  }, [lensData.ldeData]);
 
   // Render LDE table header
   const renderTableHeader = () => {
@@ -60,7 +83,7 @@ export const LensesTab = ({ selectedSystem, activeLensTab, colorScheme }) => {
   // Render LDE table rows
   const renderTableRows = () => {
     return React.createElement('tbody', null,
-      lensData.ldeData.map((surface, index) =>
+      cleanedLdeData.map((surface, index) =>
         React.createElement('tr',
           {
             key: index,
@@ -143,6 +166,40 @@ export const LensesTab = ({ selectedSystem, activeLensTab, colorScheme }) => {
           renderTableHeader(),
           renderTableRows()
         )
+      )
+    ),
+
+    // Lens Diagram section
+    React.createElement('div',
+      { style: { marginBottom: '20px' } },
+      React.createElement('h3',
+        { style: { color: c.text, marginBottom: '12px', fontSize: '16px' } },
+        'Lens Diagram'
+      ),
+      React.createElement('div',
+        {
+          style: {
+            backgroundColor: c.panel,
+            borderRadius: '8px',
+            padding: '20px',
+            height: '400px'
+          }
+        },
+        React.createElement(OpticalSystemRenderer, {
+          surfaces: cleanedLdeData,
+          options: {
+            showAxis: true,
+            showSurfaceNumbers: true,
+            showDimensions: true,
+            fillLenses: true,
+            showTTL: false,
+            showCT: true,
+            showET: true,
+            showOAL: true
+          },
+          width: 800,
+          height: 400
+        })
       )
     ),
 
@@ -297,6 +354,248 @@ export const LensesTab = ({ selectedSystem, activeLensTab, colorScheme }) => {
               }
             },
             'Back Focal Length'
+          )
+        )
+      )
+    ),
+
+    // Autocollimation Points section
+    autocollimationPoints.valid && React.createElement('div',
+      { style: { marginBottom: '20px' } },
+      React.createElement('h3',
+        { style: { color: c.text, marginBottom: '12px', fontSize: '16px' } },
+        'Autocollimation Points'
+      ),
+      React.createElement('div',
+        {
+          style: {
+            display: 'grid',
+            gridTemplateColumns: '1fr 1fr',
+            gap: '16px'
+          }
+        },
+        // Normal orientation
+        React.createElement('div', null,
+          React.createElement('div',
+            {
+              style: {
+                fontSize: '12px',
+                fontWeight: '600',
+                color: c.textDim,
+                marginBottom: '8px'
+              }
+            },
+            'Normal Orientation'
+          ),
+          React.createElement('div',
+            {
+              style: {
+                padding: '12px',
+                backgroundColor: c.panel,
+                borderRadius: '8px',
+                border: `1px solid ${c.border}`
+              }
+            },
+            React.createElement('table',
+              {
+                style: {
+                  width: '100%',
+                  borderCollapse: 'collapse',
+                  fontSize: '12px'
+                }
+              },
+              React.createElement('thead', null,
+                React.createElement('tr', null,
+                  React.createElement('th',
+                    {
+                      style: {
+                        padding: '6px 8px',
+                        color: c.textDim,
+                        textAlign: 'center',
+                        borderBottom: `1px solid ${c.border}`,
+                        fontWeight: '600'
+                      }
+                    },
+                    'Surface'
+                  ),
+                  React.createElement('th',
+                    {
+                      style: {
+                        padding: '6px 8px',
+                        color: c.textDim,
+                        textAlign: 'center',
+                        borderBottom: `1px solid ${c.border}`,
+                        fontWeight: '600'
+                      }
+                    },
+                    'L (mm)'
+                  ),
+                  React.createElement('th',
+                    {
+                      style: {
+                        padding: '6px 8px',
+                        color: c.textDim,
+                        textAlign: 'center',
+                        borderBottom: `1px solid ${c.border}`,
+                        fontWeight: '600'
+                      }
+                    },
+                    'γ'
+                  )
+                )
+              ),
+              React.createElement('tbody', null,
+                ...autocollimationPoints.normal.map((point, idx) =>
+                  React.createElement('tr',
+                    { key: idx },
+                    React.createElement('td',
+                      {
+                        style: {
+                          padding: '6px 8px',
+                          color: c.text,
+                          textAlign: 'center'
+                        }
+                      },
+                      point.surfaceNumber
+                    ),
+                    React.createElement('td',
+                      {
+                        style: {
+                          padding: '6px 8px',
+                          color: c.text,
+                          textAlign: 'center',
+                          fontFamily: 'monospace'
+                        }
+                      },
+                      formatAutocollimationDistance(point.L, 3)
+                    ),
+                    React.createElement('td',
+                      {
+                        style: {
+                          padding: '6px 8px',
+                          color: c.text,
+                          textAlign: 'center',
+                          fontFamily: 'monospace'
+                        }
+                      },
+                      formatAngularMagnification(point.gamma, 4)
+                    )
+                  )
+                )
+              )
+            )
+          )
+        ),
+        // Reversed orientation
+        React.createElement('div', null,
+          React.createElement('div',
+            {
+              style: {
+                fontSize: '12px',
+                fontWeight: '600',
+                color: c.textDim,
+                marginBottom: '8px'
+              }
+            },
+            'Reversed Orientation'
+          ),
+          React.createElement('div',
+            {
+              style: {
+                padding: '12px',
+                backgroundColor: c.panel,
+                borderRadius: '8px',
+                border: `1px solid ${c.border}`
+              }
+            },
+            React.createElement('table',
+              {
+                style: {
+                  width: '100%',
+                  borderCollapse: 'collapse',
+                  fontSize: '12px'
+                }
+              },
+              React.createElement('thead', null,
+                React.createElement('tr', null,
+                  React.createElement('th',
+                    {
+                      style: {
+                        padding: '6px 8px',
+                        color: c.textDim,
+                        textAlign: 'center',
+                        borderBottom: `1px solid ${c.border}`,
+                        fontWeight: '600'
+                      }
+                    },
+                    'Surface'
+                  ),
+                  React.createElement('th',
+                    {
+                      style: {
+                        padding: '6px 8px',
+                        color: c.textDim,
+                        textAlign: 'center',
+                        borderBottom: `1px solid ${c.border}`,
+                        fontWeight: '600'
+                      }
+                    },
+                    'L (mm)'
+                  ),
+                  React.createElement('th',
+                    {
+                      style: {
+                        padding: '6px 8px',
+                        color: c.textDim,
+                        textAlign: 'center',
+                        borderBottom: `1px solid ${c.border}`,
+                        fontWeight: '600'
+                      }
+                    },
+                    'γ'
+                  )
+                )
+              ),
+              React.createElement('tbody', null,
+                ...autocollimationPoints.reversed.map((point, idx) =>
+                  React.createElement('tr',
+                    { key: idx },
+                    React.createElement('td',
+                      {
+                        style: {
+                          padding: '6px 8px',
+                          color: c.text,
+                          textAlign: 'center'
+                        }
+                      },
+                      point.surfaceNumber
+                    ),
+                    React.createElement('td',
+                      {
+                        style: {
+                          padding: '6px 8px',
+                          color: c.text,
+                          textAlign: 'center',
+                          fontFamily: 'monospace'
+                        }
+                      },
+                      formatAutocollimationDistance(point.L, 3)
+                    ),
+                    React.createElement('td',
+                      {
+                        style: {
+                          padding: '6px 8px',
+                          color: c.text,
+                          textAlign: 'center',
+                          fontFamily: 'monospace'
+                        }
+                      },
+                      formatAngularMagnification(point.gamma, 4)
+                    )
+                  )
+                )
+              )
+            )
           )
         )
       )
